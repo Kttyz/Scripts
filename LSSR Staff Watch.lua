@@ -9,11 +9,13 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local ADMIN_USERNAMES = {          
     "zog",
     "MerciElan",
+	"unicornisforalljk",
 }
 
 local ADMIN_DISPLAYNAMES = {       
     "zog",
     "Knot",
+	"Jerry",
 }
 
 local MOD_USERNAMES = {            
