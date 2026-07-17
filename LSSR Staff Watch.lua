@@ -1,38 +1,27 @@
--- Player Watchlist / Staff Detector (Admins + Mods)
+-- Player Watchlist / Staff Detector (Admins + Mods) + Fancy Notifications
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ==================== CONFIG ====================
-local ADMIN_USERNAMES = {          
-    "zog",
-    "MerciElan",
-	"unicornisforalljk",
+local ADMIN_USERNAMES = {
+    "zog", "MerciElan", "unicornisforalljk",
 }
-
-local ADMIN_DISPLAYNAMES = {       
-    "zog",
-    "Knot",
-	"Jerry",
+local ADMIN_DISPLAYNAMES = {
+    "zog", "Knot", "Jerry",
 }
-
-local MOD_USERNAMES = {            
-    "Alex_banned54",
-    "DollszMaker",
-    "55Love_5",
-    "traceallmyscars",
+local MOD_USERNAMES = {
+    "Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars",
 }
-
-local MOD_DISPLAYNAMES = {         
-    "CharlieEatsNuggies",
-    "Nai",
-    "lee",
-    "captor",
+local MOD_DISPLAYNAMES = {
+    "CharlieEatsNuggies", "Nai", "lee", "captor",
 }
 
 local CHECK_INTERVAL = 3
+local NOTIFY_MODE = "stack"
 -- ===============================================
 
 local watchedPlayers = {}
@@ -41,10 +30,8 @@ local connections = {}
 local running = true
 local minimized = false
 local expandedSize = Vector2.new(340, 500)
-
 local logEntries = {}
 
--- Previous cleanup
 if _G.PlayerWatchlistCleanup then pcall(_G.PlayerWatchlistCleanup) end
 
 local function connect(signal, callback)
@@ -53,7 +40,98 @@ local function connect(signal, callback)
 	return conn
 end
 
--- ==================== GUI ====================
+-- ==================== NOTIFICATIONS ====================
+local NotifyGui = Instance.new("ScreenGui")
+NotifyGui.Name = "WatchlistNotifications"
+NotifyGui.ResetOnSpawn = false
+NotifyGui.Parent = PlayerGui
+
+local singleFrame, singleTitle, singleText
+local singleToken = 0
+local stackCount = 0
+
+local function createNotificationFrame()
+	local frame = Instance.new("Frame")
+	frame.BackgroundColor3 = Color3.fromRGB(36, 36, 37)
+	frame.BorderSizePixel = 0
+	frame.Size = UDim2.new(0, 250, 0, 100)
+	frame.Position = UDim2.new(1, -270, 1, 20)
+	frame.Parent = NotifyGui
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundColor3 = Color3.fromRGB(46, 46, 47)
+	title.BorderSizePixel = 0
+	title.Size = UDim2.new(1, 0, 0, 22)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 15
+	title.Text = "Watchlist"
+	title.TextColor3 = Color3.new(1, 1, 1)
+	title.Parent = frame
+
+	local text = Instance.new("TextLabel")
+	text.BackgroundTransparency = 1
+	text.Position = UDim2.new(0, 8, 0, 28)
+	text.Size = UDim2.new(1, -16, 1, -34)
+	text.Font = Enum.Font.Gotham
+	text.TextSize = 14
+	text.TextColor3 = Color3.new(1, 1, 1)
+	text.TextWrapped = true
+	text.Parent = frame
+
+	return frame, title, text
+end
+
+singleFrame, singleTitle, singleText = createNotificationFrame()
+
+local function tween(obj, pos, dir)
+	TweenService:Create(obj, TweenInfo.new(0.35, Enum.EasingStyle.Quart, dir), {Position = pos}):Play()
+end
+
+local function notifySingle(title, text, length)
+	singleToken += 1
+	local token = singleToken
+	singleTitle.Text = title or "Watchlist"
+	singleText.Text = text or ""
+	tween(singleFrame, UDim2.new(1, -270, 1, -120), Enum.EasingDirection.Out)
+
+	task.delay(length or 5, function()
+		if token == singleToken then
+			tween(singleFrame, UDim2.new(1, -270, 1, 20), Enum.EasingDirection.In)
+		end
+	end)
+end
+
+local function notifyStack(title, text, length)
+	stackCount += 1
+	local slot = stackCount
+	local frame, titleLabel, textLabel = createNotificationFrame()
+	titleLabel.Text = title or "Watchlist"
+	textLabel.Text = text or ""
+
+	local yOffset = -120 - ((slot - 1) * 110)
+	tween(frame, UDim2.new(1, -270, 1, yOffset), Enum.EasingDirection.Out)
+
+	task.delay(length or 5, function()
+		tween(frame, UDim2.new(1, -270, 1, 20), Enum.EasingDirection.In)
+		task.wait(0.4)
+		if frame then frame:Destroy() end
+		stackCount = math.max(stackCount - 1, 0)
+	end)
+end
+
+local function notify(title, text, length)
+	if NOTIFY_MODE == "stack" then
+		notifyStack(title, text, length)
+	else
+		notifySingle(title, text, length)
+	end
+	
+	addLog(title .. ": " .. text)
+	statusLabel.Text = text
+end
+
+-- ==================== GUI & LOGIC ====================
 local gui = Instance.new("ScreenGui")
 gui.Name = "PlayerWatchlistGui"
 gui.ResetOnSpawn = false
@@ -125,7 +203,6 @@ statusLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
 statusLabel.TextSize = 12
 statusLabel.Parent = content
 
--- Tabs
 local tabFrame = Instance.new("Frame")
 tabFrame.LayoutOrder = 2
 tabFrame.Size = UDim2.new(1, 0, 1, -100)
@@ -211,37 +288,16 @@ local function updatePlayerList()
 
 	local hasPlayers = false
 
-	-- Admins
 	for player, data in pairs(playerData) do
-		if data.category == "Admin" and player.Parent then
+		if player.Parent and data then
 			hasPlayers = true
-			local frame = Instance.new("Frame")
-			frame.Size = UDim2.new(1, -8, 0, 36)
-			frame.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
-			frame.Parent = playerList
-			Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
-			
-			local lbl = Instance.new("TextLabel")
-			lbl.Size = UDim2.new(1, -10, 1, 0)
-			lbl.Position = UDim2.fromOffset(8, 0)
-			lbl.BackgroundTransparency = 1
-			lbl.Text = "👑 " .. data.displayName .. " <font color='rgb(200,200,200)'>(@" .. data.username .. ")</font>"
-			lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
-			lbl.TextSize = 14
-			lbl.Font = Enum.Font.GothamSemibold
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.RichText = true
-			lbl.Parent = frame
-		end
-	end
+			local color = data.category == "Admin" and Color3.fromRGB(60, 30, 30) or Color3.fromRGB(40, 45, 60)
+			local emoji = data.category == "Admin" and "👑" or "🛡️"
+			local textColor = data.category == "Admin" and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(100, 180, 255)
 
-	-- Mods
-	for player, data in pairs(playerData) do
-		if data.category == "Mod" and player.Parent then
-			hasPlayers = true
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, -8, 0, 36)
-			frame.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
+			frame.BackgroundColor3 = color
 			frame.Parent = playerList
 			Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
 			
@@ -249,8 +305,8 @@ local function updatePlayerList()
 			lbl.Size = UDim2.new(1, -10, 1, 0)
 			lbl.Position = UDim2.fromOffset(8, 0)
 			lbl.BackgroundTransparency = 1
-			lbl.Text = "🛡️ " .. data.displayName .. " <font color='rgb(200,200,200)'>(@" .. data.username .. ")</font>"
-			lbl.TextColor3 = Color3.fromRGB(100, 180, 255)
+			lbl.Text = emoji .. " " .. data.displayName .. " <font color='rgb(200,200,200)'>(@" .. data.username .. ")</font>"
+			lbl.TextColor3 = textColor
 			lbl.TextSize = 14
 			lbl.Font = Enum.Font.GothamSemibold
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -273,11 +329,6 @@ local function updatePlayerList()
 	playerList.CanvasSize = UDim2.new(0,0,0, playerList.UIListLayout.AbsoluteContentSize.Y)
 end
 
-local function notify(message)
-	statusLabel.Text = message
-	addLog(message)
-end
-
 local function isWatched(player)
 	for _, name in ipairs(ADMIN_USERNAMES) do if player.Name == name then return "Admin" end end
 	for _, name in ipairs(ADMIN_DISPLAYNAMES) do if player.DisplayName == name then return "Admin" end end
@@ -289,7 +340,6 @@ end
 local function checkPlayers()
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
-		
 		local category = isWatched(player)
 		
 		if category and not watchedPlayers[player] then
@@ -299,14 +349,14 @@ local function checkPlayers()
 				displayName = player.DisplayName,
 				category = category
 			}
-			notify("[" .. category .. "] " .. player.DisplayName .. " (@" .. player.Name .. ") **JOINED**")
+			notify("[" .. category .. "]", player.DisplayName .. " (@" .. player.Name .. ") **JOINED**", 6)
 		end
 	end
 	
-	-- Check for leaves
+	-- Remove players who left
 	for player, data in pairs(playerData) do
 		if not player.Parent then
-			notify("[" .. data.category .. "] " .. data.displayName .. " (@" .. data.username .. ") **LEFT**")
+			notify("[" .. data.category .. "]", data.displayName .. " (@" .. data.username .. ") **LEFT**", 5)
 			watchedPlayers[player] = nil
 			playerData[player] = nil
 		end
@@ -319,11 +369,12 @@ local function cleanup()
 	running = false
 	for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
 	if gui then gui:Destroy() end
+	if NotifyGui then NotifyGui:Destroy() end
 end
 
 _G.PlayerWatchlistCleanup = cleanup
 
--- Tab Switching
+-- Tab, Buttons, Drag, Resize (same as before)
 connect(playersTabBtn.MouseButton1Click, function()
 	playerList.Visible = true
 	logFrame.Visible = false
@@ -338,7 +389,6 @@ connect(logTabBtn.MouseButton1Click, function()
 	playersTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,65)
 end)
 
--- Buttons
 connect(minimizeButton.MouseButton1Click, function()
 	minimized = not minimized
 	content.Visible = not minimized
@@ -349,7 +399,7 @@ end)
 
 connect(killButton.MouseButton1Click, cleanup)
 
--- Drag & Resize (unchanged)
+-- Drag
 local dragging = false
 local dragStart, startPosition
 connect(titleBar.InputBegan, function(input)
@@ -369,6 +419,7 @@ connect(UserInputService.InputEnded, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
 end)
 
+-- Resize
 local resizing = false
 local resizeStart, startSize
 connect(resizeHandle.InputBegan, function(input)
@@ -397,7 +448,7 @@ connect(Players.PlayerRemoving, checkPlayers)
 
 -- Start
 addLog("Player Watchlist loaded")
-notify("Monitoring Admins + Mods")
+notify("Watchlist", "Monitoring Admins + Mods", 5)
 
 while running and gui.Parent do
 	checkPlayers()
