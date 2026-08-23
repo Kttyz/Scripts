@@ -30,6 +30,10 @@ local MOD_USERNAMES = {
 
 local CHECK_INTERVAL = 3
 local NOTIFY_MODE = "stack" -- "stack" or "single"
+local MONITORED_COMMANDS = {
+	";kick", ";ban", ";smite", ";bring", ";fling",
+	";freeze", ";jail", ";unfreeze", ";unjail", ";re",
+}
 
 -- ===============================================
 
@@ -497,7 +501,12 @@ local function onChatMessage(message)
 	local chatMessage = message.Text or ""
 	local lowerMessage = string.lower(chatMessage)
 	local command
-	if string.find(lowerMessage, ";kick", 1, true) then command = "kick" elseif string.find(lowerMessage, ";ban", 1, true) then command = "ban" end
+	for _, monitoredCommand in ipairs(MONITORED_COMMANDS) do
+		if string.find(lowerMessage, monitoredCommand, 1, true) then
+			command = string.sub(monitoredCommand, 2)
+			break
+		end
+	end
 	if command then
 		addLog("[" .. command .. "] [" .. player.DisplayName .. "] (@" .. player.Name .. "): " .. chatMessage)
 		playNotifySound()
