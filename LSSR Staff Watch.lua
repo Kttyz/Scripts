@@ -14,10 +14,10 @@ local ADMIN_DISPLAYNAMES = {
     "zog", "Knot", "Jerry",
 }
 local MOD_USERNAMES = {
-    "Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars",
+    "Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars", "loomisyy",
 }
 local MOD_DISPLAYNAMES = {
-    "CharlieEatsNuggies", "Nai", "lee", "captor",
+    "CharlieEatsNuggies", "Nai", "lee", "captor", "bec",
 }
 
 local CHECK_INTERVAL = 3
