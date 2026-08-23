@@ -1,38 +1,36 @@
--- Player Watchlist / Staff Detector (Admins + Mods) + Fancy Notifications + Chat Monitor
+-- Player Watchlist / Staff Detector (Admins + Mods + Custom Watch)
+-- Fancy notifications, global TextChatService monitoring, and custom player labels.
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-
-local function playNotifySound()
-	local sound = Instance.new("Sound")
-	sound.SoundId = "rbxassetid://97972687450528"
-	sound.Volume = 1.0
-	sound.Parent = game:GetService("SoundService")
-	sound:Play()
-	sound.Ended:Connect(function()
-		sound:Destroy()
-	end)
-end
+local TextChatService = game:GetService("TextChatService")
+local SoundService = game:GetService("SoundService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ==================== CONFIG ====================
+
 local ADMIN_USERNAMES = {
-	"zog", "MerciElan", "unicornisforalljk",
+	"zog", -- zog
+	"MerciElan", -- Knot
+	"unicornisforalljk", -- Jerry
 }
-local ADMIN_DISPLAYNAMES = {
-	"zog", "Knot", "Jerry",
-}
+
 local MOD_USERNAMES = {
-	"Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars", "loomisyy", "unhingedjaws",
-}
-local MOD_DISPLAYNAMES = {
-	"CharlieEatsNuggies", "Nai", "lee", "captor", "bec", "unhingedjaws"
+	"Alex_banned54", -- CharlieEatsNuggies
+	"DollszMaker", -- Nai
+	"55Love_5", -- lee
+	"traceallmyscars", -- captor
+	"Ioomisyy", -- bec
+	"unhingedjaws", -- unhingedjaws
+	"solivne", -- kaia
 }
 
 local CHECK_INTERVAL = 3
-local NOTIFY_MODE = "stack"
+local NOTIFY_MODE = "stack" -- "stack" or "single"
+
 -- ===============================================
 
 local watchedPlayers = {}
@@ -42,30 +40,41 @@ local running = true
 local minimized = false
 local expandedSize = Vector2.new(340, 500)
 local logEntries = {}
+local selectingCustomWatch = false
 
-if _G.PlayerWatchlistCleanup then pcall(_G.PlayerWatchlistCleanup) end
+if _G.PlayerWatchlistCleanup then
+	pcall(_G.PlayerWatchlistCleanup)
+end
 
 local function connect(signal, callback)
-	local conn = signal:Connect(callback)
-	table.insert(connections, conn)
-	return conn
+	local connection = signal:Connect(callback)
+	table.insert(connections, connection)
+	return connection
+end
+
+local function playNotifySound()
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://97972687450528"
+	sound.Volume = 1
+	sound.Parent = SoundService
+	sound:Play()
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
 end
 
 -- ==================== NOTIFICATIONS ====================
+
 local NotifyGui = Instance.new("ScreenGui")
 NotifyGui.Name = "WatchlistNotifications"
 NotifyGui.ResetOnSpawn = false
 NotifyGui.Parent = PlayerGui
 
-local singleFrame, singleTitle, singleText
-local singleToken = 0
-local stackCount = 0
-
 local function createNotificationFrame()
 	local frame = Instance.new("Frame")
 	frame.BackgroundColor3 = Color3.fromRGB(36, 36, 37)
 	frame.BorderSizePixel = 0
-	frame.Size = UDim2.new(0, 250, 0, 100)
+	frame.Size = UDim2.fromOffset(250, 100)
 	frame.Position = UDim2.new(1, -270, 1, 20)
 	frame.Parent = NotifyGui
 	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
@@ -82,21 +91,21 @@ local function createNotificationFrame()
 
 	local text = Instance.new("TextLabel")
 	text.BackgroundTransparency = 1
-	text.Position = UDim2.new(0, 8, 0, 28)
+	text.Position = UDim2.fromOffset(8, 28)
 	text.Size = UDim2.new(1, -16, 1, -34)
 	text.Font = Enum.Font.Gotham
 	text.TextSize = 14
 	text.TextColor3 = Color3.new(1, 1, 1)
 	text.TextWrapped = true
 	text.Parent = frame
-
 	return frame, title, text
 end
 
-singleFrame, singleTitle, singleText = createNotificationFrame()
+local singleFrame, singleTitle, singleText = createNotificationFrame()
+local singleToken, stackCount = 0, 0
 
-local function tween(obj, pos, dir)
-	TweenService:Create(obj, TweenInfo.new(0.35, Enum.EasingStyle.Quart, dir), {Position = pos}):Play()
+local function tween(object, position, direction)
+	TweenService:Create(object, TweenInfo.new(0.35, Enum.EasingStyle.Quart, direction), { Position = position }):Play()
 end
 
 local function notifySingle(title, text, length)
@@ -105,7 +114,6 @@ local function notifySingle(title, text, length)
 	singleTitle.Text = title or "Watchlist"
 	singleText.Text = text or ""
 	tween(singleFrame, UDim2.new(1, -270, 1, -120), Enum.EasingDirection.Out)
-
 	task.delay(length or 5, function()
 		if token == singleToken then
 			tween(singleFrame, UDim2.new(1, -270, 1, 20), Enum.EasingDirection.In)
@@ -119,10 +127,7 @@ local function notifyStack(title, text, length)
 	local frame, titleLabel, textLabel = createNotificationFrame()
 	titleLabel.Text = title or "Watchlist"
 	textLabel.Text = text or ""
-
-	local yOffset = -120 - ((slot - 1) * 110)
-	tween(frame, UDim2.new(1, -270, 1, yOffset), Enum.EasingDirection.Out)
-
+	tween(frame, UDim2.new(1, -270, 1, -120 - ((slot - 1) * 110)), Enum.EasingDirection.Out)
 	task.delay(length or 5, function()
 		tween(frame, UDim2.new(1, -270, 1, 20), Enum.EasingDirection.In)
 		task.wait(0.4)
@@ -131,18 +136,8 @@ local function notifyStack(title, text, length)
 	end)
 end
 
-local function notify(title, text, length)
-	playNotifySound()
-	if NOTIFY_MODE == "stack" then
-		notifyStack(title, text, length)
-	else
-		notifySingle(title, text, length)
-	end
-	addLog(title .. ": " .. text)
-	statusLabel.Text = text
-end
+-- ==================== MAIN GUI ====================
 
--- ==================== GUI & LOGIC ====================
 local gui = Instance.new("ScreenGui")
 gui.Name = "PlayerWatchlistGui"
 gui.ResetOnSpawn = false
@@ -155,7 +150,6 @@ main.Position = UDim2.new(0, 20, 0.5, -250)
 main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 main.BorderSizePixel = 0
 main.Parent = gui
-
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 6)
 Instance.new("UIStroke", main).Color = Color3.fromRGB(85, 85, 95)
 
@@ -170,29 +164,23 @@ titleBar.TextSize = 14
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = main
 
-local minimizeButton = Instance.new("TextButton")
-minimizeButton.Size = UDim2.fromOffset(26, 26)
-minimizeButton.Position = UDim2.new(1, -62, 0, 4)
-minimizeButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
-minimizeButton.Text = "-"
-minimizeButton.TextColor3 = Color3.new(1,1,1)
-minimizeButton.TextSize = 16
-minimizeButton.Font = Enum.Font.GothamBold
-minimizeButton.AutoButtonColor = false
-minimizeButton.Parent = main
-Instance.new("UICorner", minimizeButton).CornerRadius = UDim.new(0, 4)
+local function makeTopButton(text, color, offset)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(26, 26)
+	button.Position = UDim2.new(1, offset, 0, 4)
+	button.BackgroundColor3 = color
+	button.Text = text
+	button.TextColor3 = Color3.new(1, 1, 1)
+	button.TextSize = 16
+	button.Font = Enum.Font.GothamBold
+	button.AutoButtonColor = false
+	button.Parent = main
+	Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
+	return button
+end
 
-local killButton = Instance.new("TextButton")
-killButton.Size = UDim2.fromOffset(26, 26)
-killButton.Position = UDim2.new(1, -32, 0, 4)
-killButton.BackgroundColor3 = Color3.fromRGB(130, 60, 65)
-killButton.Text = "X"
-killButton.TextColor3 = Color3.new(1,1,1)
-killButton.TextSize = 16
-killButton.Font = Enum.Font.GothamBold
-killButton.AutoButtonColor = false
-killButton.Parent = main
-Instance.new("UICorner", killButton).CornerRadius = UDim.new(0, 4)
+local minimizeButton = makeTopButton("-", Color3.fromRGB(70, 70, 80), -62)
+local killButton = makeTopButton("X", Color3.fromRGB(130, 60, 65), -32)
 
 local content = Instance.new("Frame")
 content.Size = UDim2.new(1, -20, 1, -54)
@@ -214,9 +202,21 @@ statusLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
 statusLabel.TextSize = 12
 statusLabel.Parent = content
 
+local customWatchButton = Instance.new("TextButton")
+customWatchButton.LayoutOrder = 1
+customWatchButton.Size = UDim2.new(1, 0, 0, 28)
+customWatchButton.BackgroundColor3 = Color3.fromRGB(85, 75, 125)
+customWatchButton.Text = "❔ Add / Edit Watch"
+customWatchButton.TextColor3 = Color3.new(1, 1, 1)
+customWatchButton.TextSize = 13
+customWatchButton.Font = Enum.Font.GothamBold
+customWatchButton.AutoButtonColor = false
+customWatchButton.Parent = content
+Instance.new("UICorner", customWatchButton).CornerRadius = UDim.new(0, 4)
+
 local tabFrame = Instance.new("Frame")
 tabFrame.LayoutOrder = 2
-tabFrame.Size = UDim2.new(1, 0, 1, -100)
+tabFrame.Size = UDim2.new(1, 0, 1, -132)
 tabFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 tabFrame.Parent = content
 Instance.new("UICorner", tabFrame).CornerRadius = UDim.new(0, 4)
@@ -226,37 +226,40 @@ tabButtons.Size = UDim2.new(1, 0, 0, 30)
 tabButtons.BackgroundTransparency = 1
 tabButtons.Parent = tabFrame
 
-local playersTabBtn = Instance.new("TextButton")
-playersTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-playersTabBtn.Text = "Players"
-playersTabBtn.BackgroundColor3 = Color3.fromRGB(55,120,80)
-playersTabBtn.Parent = tabButtons
-Instance.new("UICorner", playersTabBtn)
+local function makeTab(text, position, color)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(0.5, 0, 1, 0)
+	button.Position = position
+	button.Text = text
+	button.BackgroundColor3 = color
+	button.TextColor3 = Color3.new(1, 1, 1)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 13
+	button.Parent = tabButtons
+	Instance.new("UICorner", button)
+	return button
+end
 
-local logTabBtn = Instance.new("TextButton")
-logTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-logTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
-logTabBtn.Text = "Log"
-logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-logTabBtn.Parent = tabButtons
-Instance.new("UICorner", logTabBtn)
+local playersTabBtn = makeTab("Players", UDim2.new(), Color3.fromRGB(55, 120, 80))
+local logTabBtn = makeTab("Log", UDim2.new(0.5, 0, 0, 0), Color3.fromRGB(55, 55, 65))
 
-local playerList = Instance.new("ScrollingFrame")
-playerList.Size = UDim2.new(1, 0, 1, -30)
-playerList.Position = UDim2.new(0,0,0,30)
-playerList.BackgroundTransparency = 1
-playerList.ScrollBarThickness = 4
-playerList.Parent = tabFrame
-Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 6)
+local function makeScroll()
+	local frame = Instance.new("ScrollingFrame")
+	frame.Size = UDim2.new(1, 0, 1, -30)
+	frame.Position = UDim2.new(0, 0, 0, 30)
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.ScrollBarThickness = 4
+	frame.Parent = tabFrame
+	local list = Instance.new("UIListLayout", frame)
+	list.Padding = UDim.new(0, 6)
+	return frame, list
+end
 
-local logFrame = Instance.new("ScrollingFrame")
-logFrame.Size = UDim2.new(1, 0, 1, -30)
-logFrame.Position = UDim2.new(0,0,0,30)
-logFrame.BackgroundTransparency = 1
-logFrame.ScrollBarThickness = 4
+local playerList, playerLayout = makeScroll()
+local logFrame, logLayout = makeScroll()
 logFrame.Visible = false
-logFrame.Parent = tabFrame
-Instance.new("UIListLayout", logFrame).Padding = UDim.new(0, 4)
+logLayout.Padding = UDim.new(0, 4)
 
 local resizeHandle = Instance.new("TextLabel")
 resizeHandle.Size = UDim2.fromOffset(22, 22)
@@ -268,126 +271,256 @@ resizeHandle.TextColor3 = Color3.fromRGB(140, 140, 150)
 resizeHandle.TextSize = 11
 resizeHandle.Parent = main
 
+-- ==================== CUSTOM ROLE EDITOR ====================
+
+local editorOverlay = Instance.new("Frame")
+editorOverlay.Size = UDim2.fromScale(1, 1)
+editorOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
+editorOverlay.BackgroundTransparency = 0.4
+editorOverlay.Visible = false
+editorOverlay.ZIndex = 20
+editorOverlay.Parent = gui
+
+local editor = Instance.new("Frame")
+editor.Size = UDim2.fromOffset(290, 232)
+editor.Position = UDim2.new(0.5, -145, 0.5, -116)
+editor.BackgroundColor3 = Color3.fromRGB(35, 35, 43)
+editor.BorderSizePixel = 0
+editor.ZIndex = 21
+editor.Parent = editorOverlay
+Instance.new("UICorner", editor).CornerRadius = UDim.new(0, 6)
+
+local editorTitle = Instance.new("TextLabel")
+editorTitle.Size = UDim2.new(1, -20, 0, 36)
+editorTitle.Position = UDim2.fromOffset(10, 0)
+editorTitle.BackgroundTransparency = 1
+editorTitle.TextColor3 = Color3.new(1, 1, 1)
+editorTitle.Font = Enum.Font.GothamBold
+editorTitle.TextSize = 14
+editorTitle.TextXAlignment = Enum.TextXAlignment.Left
+editorTitle.ZIndex = 22
+editorTitle.Parent = editor
+
+local function makeInput(placeholder, y)
+	local input = Instance.new("TextBox")
+	input.Size = UDim2.new(1, -20, 0, 34)
+	input.Position = UDim2.fromOffset(10, y)
+	input.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+	input.BorderSizePixel = 0
+	input.PlaceholderText = placeholder
+	input.PlaceholderColor3 = Color3.fromRGB(175, 175, 185)
+	input.TextColor3 = Color3.new(1, 1, 1)
+	input.TextSize = 14
+	input.Font = Enum.Font.Gotham
+	input.ClearTextOnFocus = false
+	input.ZIndex = 22
+	input.Parent = editor
+	Instance.new("UICorner", input).CornerRadius = UDim.new(0, 4)
+	return input
+end
+
+local emojiInput = makeInput("Emoji (example: ⚠️)", 45)
+local roleInput = makeInput("Role/name (example: Suspicious)", 86)
+
+local saveButton = Instance.new("TextButton")
+saveButton.Size = UDim2.fromOffset(130, 34)
+saveButton.Position = UDim2.fromOffset(10, 140)
+saveButton.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
+saveButton.Text = "Save"
+saveButton.TextColor3 = Color3.new(1, 1, 1)
+saveButton.Font = Enum.Font.GothamBold
+saveButton.TextSize = 13
+saveButton.ZIndex = 22
+saveButton.Parent = editor
+Instance.new("UICorner", saveButton).CornerRadius = UDim.new(0, 4)
+
+local cancelButton = Instance.new("TextButton")
+cancelButton.Size = UDim2.fromOffset(130, 34)
+cancelButton.Position = UDim2.fromOffset(150, 140)
+cancelButton.BackgroundColor3 = Color3.fromRGB(90, 60, 65)
+cancelButton.Text = "Cancel"
+cancelButton.TextColor3 = Color3.new(1, 1, 1)
+cancelButton.Font = Enum.Font.GothamBold
+cancelButton.TextSize = 13
+cancelButton.ZIndex = 22
+cancelButton.Parent = editor
+Instance.new("UICorner", cancelButton).CornerRadius = UDim.new(0, 4)
+
+local removeButton = Instance.new("TextButton")
+removeButton.Size = UDim2.new(1, -20, 0, 30)
+removeButton.Position = UDim2.fromOffset(10, 188)
+removeButton.BackgroundColor3 = Color3.fromRGB(145, 55, 60)
+removeButton.Text = "Remove from Watchlist"
+removeButton.TextColor3 = Color3.new(1, 1, 1)
+removeButton.Font = Enum.Font.GothamBold
+removeButton.TextSize = 13
+removeButton.ZIndex = 22
+removeButton.Parent = editor
+Instance.new("UICorner", removeButton).CornerRadius = UDim.new(0, 4)
+
+local editingPlayer
+local showEditor
+
 -- ==================== FUNCTIONS ====================
+
 local function addLog(message)
 	table.insert(logEntries, 1, os.date("%H:%M:%S") .. " | " .. message)
 	if #logEntries > 50 then table.remove(logEntries) end
-
-	for _, v in ipairs(logFrame:GetChildren()) do
-		if v:IsA("TextLabel") then v:Destroy() end
+	for _, child in ipairs(logFrame:GetChildren()) do
+		if child:IsA("TextLabel") then child:Destroy() end
 	end
-
-	for _, msg in ipairs(logEntries) do
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(1, -10, 0, 26)
-		lbl.BackgroundTransparency = 1
-		lbl.Text = msg
-		lbl.TextColor3 = Color3.new(1,1,1)
-		lbl.TextSize = 13
-		lbl.Font = Enum.Font.Gotham
-		lbl.TextXAlignment = Enum.TextXAlignment.Left
-		lbl.TextWrapped = true
-		lbl.Parent = logFrame
+	for _, messageText in ipairs(logEntries) do
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, -10, 0, 26)
+		label.BackgroundTransparency = 1
+		label.Text = messageText
+		label.TextColor3 = Color3.new(1, 1, 1)
+		label.TextSize = 13
+		label.Font = Enum.Font.Gotham
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextWrapped = true
+		label.Parent = logFrame
 	end
-	logFrame.CanvasSize = UDim2.new(0,0,0, logFrame.UIListLayout.AbsoluteContentSize.Y)
+	logFrame.CanvasSize = UDim2.new(0, 0, 0, logLayout.AbsoluteContentSize.Y)
+end
+
+local function notify(title, text, length)
+	playNotifySound()
+	if NOTIFY_MODE == "stack" then notifyStack(title, text, length) else notifySingle(title, text, length) end
+	addLog(title .. ": " .. text)
+	statusLabel.Text = text
 end
 
 local function updatePlayerList()
-	for _, v in ipairs(playerList:GetChildren()) do
-		if v:IsA("TextLabel") or v:IsA("Frame") then v:Destroy() end
+	for _, child in ipairs(playerList:GetChildren()) do
+		if child:IsA("TextLabel") or child:IsA("Frame") then child:Destroy() end
 	end
-
 	local hasPlayers = false
-
 	for player, data in pairs(playerData) do
 		if player.Parent and data then
 			hasPlayers = true
-			local color = data.category == "Admin" and Color3.fromRGB(60, 30, 30) or Color3.fromRGB(40, 45, 60)
-			local emoji = data.category == "Admin" and "👑" or "🛡️"
-			local textColor = data.category == "Admin" and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(100, 180, 255)
+			local isAdmin = data.category == "Admin"
+			local isMod = data.category == "Mod"
+			local color = isAdmin and Color3.fromRGB(60, 30, 30) or (isMod and Color3.fromRGB(40, 45, 60) or Color3.fromRGB(60, 50, 85))
+			local textColor = isAdmin and Color3.fromRGB(255, 100, 100) or (isMod and Color3.fromRGB(100, 180, 255) or Color3.fromRGB(210, 180, 255))
+			local emoji = isAdmin and "👑" or (isMod and "🛡️" or (data.emoji or "❔"))
+			local rightRole = isAdmin and "ADMIN" or (isMod and "MOD" or (data.customRole or "Unknown"))
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, -8, 0, 36)
 			frame.BackgroundColor3 = color
+			frame.BorderSizePixel = 0
 			frame.Parent = playerList
 			Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
-			
-			local lbl = Instance.new("TextLabel")
-			lbl.Size = UDim2.new(1, -10, 1, 0)
-			lbl.Position = UDim2.fromOffset(8, 0)
-			lbl.BackgroundTransparency = 1
-			lbl.Text = emoji .. " " .. data.displayName .. " <font color='rgb(200,200,200)'>(@" .. data.username .. ")</font>"
-			lbl.TextColor3 = textColor
-			lbl.TextSize = 14
-			lbl.Font = Enum.Font.GothamSemibold
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.RichText = true
-			lbl.Parent = frame
+
+			local label = Instance.new("TextLabel")
+			label.Size = UDim2.new(1, -105, 1, 0)
+			label.Position = UDim2.fromOffset(8, 0)
+			label.BackgroundTransparency = 1
+			label.Text = emoji .. " " .. data.displayName .. " <font color='rgb(200,200,200)'>(@" .. data.username .. ")</font>"
+			label.TextColor3 = textColor
+			label.TextSize = 14
+			label.Font = Enum.Font.GothamSemibold
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.RichText = true
+			label.TextTruncate = Enum.TextTruncate.AtEnd
+			label.Parent = frame
+
+			local roleLabel = Instance.new("TextLabel")
+			roleLabel.Size = UDim2.new(0, 92, 1, 0)
+			roleLabel.Position = UDim2.new(1, -100, 0, 0)
+			roleLabel.BackgroundTransparency = 1
+			roleLabel.Text = rightRole
+			roleLabel.TextColor3 = textColor
+			roleLabel.TextSize = 11
+			roleLabel.Font = Enum.Font.GothamBold
+			roleLabel.TextXAlignment = Enum.TextXAlignment.Right
+			roleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			roleLabel.Parent = frame
+
+			-- Only custom/Unknown entries are clickable. Admin and Mod entries stay locked.
+			if data.category == "Custom" then
+				local editRowButton = Instance.new("TextButton")
+				editRowButton.Size = UDim2.fromScale(1, 1)
+				editRowButton.BackgroundTransparency = 1
+				editRowButton.Text = ""
+				editRowButton.ZIndex = 2
+				editRowButton.Parent = frame
+				editRowButton.MouseButton1Click:Connect(function()
+					if not editorOverlay.Visible then showEditor(player) end
+				end)
+			end
 		end
 	end
-
 	if not hasPlayers then
 		local empty = Instance.new("TextLabel")
-		empty.Size = UDim2.new(1,0,0,50)
+		empty.Size = UDim2.new(1, 0, 0, 50)
 		empty.BackgroundTransparency = 1
 		empty.Text = "No watched players in game"
-		empty.TextColor3 = Color3.fromRGB(140,140,150)
+		empty.TextColor3 = Color3.fromRGB(140, 140, 150)
 		empty.Font = Enum.Font.GothamSemibold
 		empty.TextSize = 14
 		empty.Parent = playerList
 	end
-	
-	playerList.CanvasSize = UDim2.new(0,0,0, playerList.UIListLayout.AbsoluteContentSize.Y)
+	playerList.CanvasSize = UDim2.new(0, 0, 0, playerLayout.AbsoluteContentSize.Y)
 end
 
 local function isWatched(player)
-	for _, name in ipairs(ADMIN_USERNAMES) do if player.Name == name then return "Admin" end end
-	for _, name in ipairs(ADMIN_DISPLAYNAMES) do if player.DisplayName == name then return "Admin" end end
-	for _, name in ipairs(MOD_USERNAMES) do if player.Name == name then return "Mod" end end
-	for _, name in ipairs(MOD_DISPLAYNAMES) do if player.DisplayName == name then return "Mod" end end
+	local username = string.lower(player.Name)
+	for _, name in ipairs(ADMIN_USERNAMES) do
+		if username == string.lower(name) then return "Admin" end
+	end
+	for _, name in ipairs(MOD_USERNAMES) do
+		if username == string.lower(name) then return "Mod" end
+	end
 	return nil
 end
 
-local function onStaffChatted(player, message)
-	local lower = string.lower(message)
-	local display = player.DisplayName
+showEditor = function(player)
+	editingPlayer = player
+	local data = playerData[player]
+	editorTitle.Text = "Edit watch: " .. player.DisplayName
+	emojiInput.Text = data.emoji or "❔"
+	roleInput.Text = data.customRole or "Unknown"
+	editorOverlay.Visible = true
+	emojiInput:CaptureFocus()
+end
 
-	if string.find(lower, ";kick") then
-		addLog("[kick] [" .. display .. "]: " .. message)
-		notify("[" .. display .. "]", "Kicked someone", 5)
-	elseif string.find(lower, ";ban") then
-		addLog("[ban] [" .. display .. "]: " .. message)
-		notify("[" .. display .. "]", "Banned someone", 5)
+-- ==================== CHAT MONITOR ====================
+
+local function onChatMessage(message)
+	if not message or not message.TextSource then return end
+	local userId = message.TextSource.UserId
+	if not userId then return end
+	local player = Players:GetPlayerByUserId(userId)
+	if not player or player == LocalPlayer or not isWatched(player) then return end
+	local chatMessage = message.Text or ""
+	local lowerMessage = string.lower(chatMessage)
+	local command
+	if string.find(lowerMessage, ";kick", 1, true) then command = "kick" elseif string.find(lowerMessage, ";ban", 1, true) then command = "ban" end
+	if command then
+		addLog("[" .. command .. "] [" .. player.DisplayName .. "] (@" .. player.Name .. "): " .. chatMessage)
+		playNotifySound()
+		notifyStack("[" .. player.DisplayName .. "]", "Used ;" .. command .. "\n" .. chatMessage, 5)
+		statusLabel.Text = player.DisplayName .. " used ;" .. command
 	end
 end
 
-local function watchStaffChat(player)
-	if player == LocalPlayer then return end
-	local category = isWatched(player)
-	if not category then return end
+connect(TextChatService.MessageReceived, onChatMessage)
 
-	player.Chatted:Connect(function(message)
-		onStaffChatted(player, message)
-	end)
-end
+-- ==================== PLAYER CHECK ====================
 
 local function checkPlayers()
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player == LocalPlayer then continue end
-		local category = isWatched(player)
-		
-		if category and not watchedPlayers[player] then
-			watchedPlayers[player] = true
-			playerData[player] = {
-				username = player.Name,
-				displayName = player.DisplayName,
-				category = category
-			}
-			notify("[" .. category .. "]", player.DisplayName .. " (@" .. player.Name .. ") **JOINED**", 6)
+		if player ~= LocalPlayer then
+			local category = isWatched(player)
+			if category and not watchedPlayers[player] then
+				watchedPlayers[player] = true
+				playerData[player] = { username = player.Name, displayName = player.DisplayName, category = category }
+				notify("[" .. category .. "]", player.DisplayName .. " (@" .. player.Name .. ") **JOINED**", 6)
+			end
 		end
 	end
-	
-	-- Remove players who left
 	for player, data in pairs(playerData) do
 		if not player.Parent then
 			notify("[" .. data.category .. "]", data.displayName .. " (@" .. data.username .. ") **LEFT**", 5)
@@ -395,52 +528,120 @@ local function checkPlayers()
 			playerData[player] = nil
 		end
 	end
-	
 	updatePlayerList()
 end
 
+-- ==================== CUSTOM WATCH SELECTION ====================
+
+connect(customWatchButton.MouseButton1Click, function()
+	if editorOverlay.Visible then return end
+	selectingCustomWatch = not selectingCustomWatch
+	customWatchButton.Text = selectingCustomWatch and "Click a player to watch/edit..." or "❔ Add / Edit Watch"
+	customWatchButton.BackgroundColor3 = selectingCustomWatch and Color3.fromRGB(125, 100, 185) or Color3.fromRGB(85, 75, 125)
+	statusLabel.Text = selectingCustomWatch and "Click a player's character in the game." or "Custom selection cancelled."
+end)
+
+connect(UserInputService.InputBegan, function(input, gameProcessed)
+	if not selectingCustomWatch or gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+	local target = LocalPlayer:GetMouse().Target
+	local character = target and target:FindFirstAncestorOfClass("Model")
+	local player = character and Players:GetPlayerFromCharacter(character)
+	if not player or player == LocalPlayer then
+		statusLabel.Text = "Click another player's character."
+		return
+	end
+	selectingCustomWatch = false
+	customWatchButton.Text = "❔ Add / Edit Watch"
+	customWatchButton.BackgroundColor3 = Color3.fromRGB(85, 75, 125)
+	local data = playerData[player]
+	if data and data.category == "Custom" then
+		showEditor(player)
+		return
+	end
+	if data then
+		statusLabel.Text = player.DisplayName .. " is already watched as " .. data.category .. "."
+		return
+	end
+	watchedPlayers[player] = true
+	playerData[player] = {
+		username = player.Name,
+		displayName = player.DisplayName,
+		category = "Custom",
+		emoji = "❔",
+		customRole = "Unknown",
+	}
+	addLog("[Custom] Added " .. player.DisplayName .. " (@" .. player.Name .. ") as Unknown")
+	statusLabel.Text = "Added " .. player.DisplayName .. " as ❔ Unknown"
+	updatePlayerList()
+end)
+
+connect(saveButton.MouseButton1Click, function()
+	if editingPlayer and playerData[editingPlayer] then
+		local data = playerData[editingPlayer]
+		data.emoji = emojiInput.Text ~= "" and emojiInput.Text or "❔"
+		data.customRole = roleInput.Text ~= "" and roleInput.Text or "Unknown"
+		addLog("[Custom] Updated " .. data.displayName .. " to " .. data.emoji .. " " .. data.customRole)
+		statusLabel.Text = "Updated " .. data.displayName .. " to " .. data.customRole
+		updatePlayerList()
+	end
+	editorOverlay.Visible = false
+	editingPlayer = nil
+end)
+
+connect(cancelButton.MouseButton1Click, function()
+	editorOverlay.Visible = false
+	editingPlayer = nil
+end)
+
+connect(removeButton.MouseButton1Click, function()
+	if editingPlayer and playerData[editingPlayer] and playerData[editingPlayer].category == "Custom" then
+		local data = playerData[editingPlayer]
+		addLog("[Custom] Removed " .. data.displayName .. " (@" .. data.username .. ") from watchlist")
+		statusLabel.Text = "Removed " .. data.displayName .. " from the watchlist"
+		watchedPlayers[editingPlayer] = nil
+		playerData[editingPlayer] = nil
+		updatePlayerList()
+	end
+	editorOverlay.Visible = false
+	editingPlayer = nil
+end)
+
+-- ==================== CLEANUP ====================
+
 local function cleanup()
 	running = false
-	for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+	for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
 	if gui then gui:Destroy() end
 	if NotifyGui then NotifyGui:Destroy() end
 end
 
 _G.PlayerWatchlistCleanup = cleanup
 
--- Tab, Buttons, Drag, Resize
+-- ==================== TABS / WINDOW ====================
+
 connect(playersTabBtn.MouseButton1Click, function()
-	playerList.Visible = true
-	logFrame.Visible = false
-	playersTabBtn.BackgroundColor3 = Color3.fromRGB(55,120,80)
-	logTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,65)
+	playerList.Visible, logFrame.Visible = true, false
+	playersTabBtn.BackgroundColor3, logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80), Color3.fromRGB(55, 55, 65)
 end)
 
 connect(logTabBtn.MouseButton1Click, function()
-	playerList.Visible = false
-	logFrame.Visible = true
-	logTabBtn.BackgroundColor3 = Color3.fromRGB(55,120,80)
-	playersTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,65)
+	playerList.Visible, logFrame.Visible = false, true
+	logTabBtn.BackgroundColor3, playersTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80), Color3.fromRGB(55, 55, 65)
 end)
 
 connect(minimizeButton.MouseButton1Click, function()
 	minimized = not minimized
-	content.Visible = not minimized
-	resizeHandle.Visible = not minimized
+	content.Visible, resizeHandle.Visible = not minimized, not minimized
 	minimizeButton.Text = minimized and "+" or "-"
 	main.Size = UDim2.fromOffset(expandedSize.X, minimized and 34 or expandedSize.Y)
 end)
 
 connect(killButton.MouseButton1Click, cleanup)
 
--- Drag
-local dragging = false
-local dragStart, startPosition
+local dragging, dragStart, startPosition = false, nil, nil
 connect(titleBar.InputBegan, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPosition = main.Position
+		dragging, dragStart, startPosition = true, input.Position, main.Position
 	end
 end)
 connect(UserInputService.InputChanged, function(input)
@@ -453,44 +654,36 @@ connect(UserInputService.InputEnded, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
 end)
 
--- Resize
-local resizing = false
-local resizeStart, startSize
+local resizing, resizeStart, startSize = false, nil, nil
 connect(resizeHandle.InputBegan, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		resizing = true
-		resizeStart = input.Position
-		startSize = main.AbsoluteSize
+		resizing, resizeStart, startSize = true, input.Position, main.AbsoluteSize
 	end
 end)
 connect(UserInputService.InputChanged, function(input)
 	if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
 		local delta = input.Position - resizeStart
-		local w = math.clamp(startSize.X + delta.X, 320, 550)
-		local h = math.clamp(startSize.Y + delta.Y, 420, 650)
-		expandedSize = Vector2.new(w, h)
-		main.Size = UDim2.fromOffset(w, h)
+		local width = math.clamp(startSize.X + delta.X, 320, 550)
+		local height = math.clamp(startSize.Y + delta.Y, 420, 650)
+		expandedSize = Vector2.new(width, height)
+		main.Size = UDim2.fromOffset(width, height)
 	end
 end)
 connect(UserInputService.InputEnded, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
 end)
 
--- Events
-connect(Players.PlayerAdded, function(player)
+connect(Players.PlayerAdded, function()
 	task.wait(1.5)
 	checkPlayers()
-	watchStaffChat(player)
 end)
-connect(Players.PlayerRemoving, checkPlayers)
+connect(Players.PlayerRemoving, function()
+	checkPlayers()
+end)
 
--- Start
 addLog("Player Watchlist loaded")
 notify("Watchlist", "Monitoring Admins + Mods", 5)
-
-for _, player in ipairs(Players:GetPlayers()) do
-	watchStaffChat(player)
-end
+checkPlayers()
 
 while running and gui.Parent do
 	checkPlayers()
