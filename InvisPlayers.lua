@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+
 local function playNotifySound()
 	local sound = Instance.new("Sound")
 	sound.SoundId = "rbxassetid://97972687450528"
@@ -364,14 +365,13 @@ local function addLog(message)
 	logFrame.CanvasSize = UDim2.new(0,0,0, logFrame.UIListLayout.AbsoluteContentSize.Y)
 end
 
-local function notify(title, text, length) 
+local function notify(title, text, length)
 	playNotifySound()
 	if NOTIFY_MODE == "stack" then
 		notifyStack(title, text, length)
 	else
 		notifySingle(title, text, length)
 	end
-	
 	print(("[Invisible Tool] %s: %s"):format(title or "Notify", text or ""))
 	setStatus(text or "")
 	addLog((title or "Notify") .. ": " .. (text or ""))
@@ -508,15 +508,17 @@ end
 local function updateInvisiblePlayers()
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
+
+		-- Already tracked → do NOT re-check visibility (our forced transparency would make the check fail)
+		if trackedInvisible[player] then
+			continue
+		end
+
 		local isInv = isPlayerInvisible(player)
-		
-		if isInv and not trackedInvisible[player] then
+		if isInv then
 			trackedInvisible[player] = true
 			notify("Detected", player.DisplayName .. " is now invisible")
 			refreshEffects(player)
-		elseif not isInv and trackedInvisible[player] then
-			restorePlayer(player)
-			notify("Visible", player.DisplayName .. " became visible")
 		end
 	end
 	updateInvisibleList()
@@ -525,10 +527,15 @@ end
 local function manualCheckVisibility()
 	local count = 0
 	for player in pairs(trackedInvisible) do
+		-- Temporarily restore so we can do a real check
+		restoreTransparency(player)
 		if not isPlayerInvisible(player) then
-			restorePlayer(player)
+			trackedInvisible[player] = nil
 			count += 1
 			notify("Visible", player.DisplayName .. " became visible")
+		else
+			-- Still invisible → re-apply effects
+			refreshEffects(player)
 		end
 	end
 	updateInvisibleList()
