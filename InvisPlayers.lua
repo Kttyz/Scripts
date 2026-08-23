@@ -2,6 +2,17 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local function playNotifySound()
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://97972687450528"
+	sound.Volume = 0.7
+	sound.Parent = game:GetService("SoundService")
+	sound:Play()
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
+end
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -16,6 +27,8 @@ local INVISIBLE_THRESHOLD = 0.85
 local OUTLINE_COLOR = Color3.fromRGB(255, 255, 255)
 local OUTLINE_TRANSPARENCY = 0
 local FILL_TRANSPARENCY = 1
+
+local NOTIFY_MODE = "stack" -- "stack" or "single"
 
 local trackedInvisible = {}
 local originalParts = {}
@@ -35,6 +48,86 @@ local function connect(signal, callback)
 	local conn = signal:Connect(callback)
 	table.insert(connections, conn)
 	return conn
+end
+
+-- ==================== NOTIFICATIONS ====================
+local NotifyGui = Instance.new("ScreenGui")
+NotifyGui.Name = "InvisibleToolNotifications"
+NotifyGui.ResetOnSpawn = false
+NotifyGui.Parent = PlayerGui
+
+local singleFrame, singleTitle, singleText
+local singleToken = 0
+local stackCount = 0
+
+local function createNotificationFrame()
+	local frame = Instance.new("Frame")
+	frame.BackgroundColor3 = Color3.fromRGB(36, 36, 37)
+	frame.BorderSizePixel = 0
+	frame.Size = UDim2.new(0, 250, 0, 100)
+	frame.Position = UDim2.new(1, -270, 1, 20)
+	frame.Parent = NotifyGui
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundColor3 = Color3.fromRGB(46, 46, 47)
+	title.BorderSizePixel = 0
+	title.Size = UDim2.new(1, 0, 0, 22)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 15
+	title.Text = "Invisible Tool"
+	title.TextColor3 = Color3.new(1, 1, 1)
+	title.Parent = frame
+
+	local text = Instance.new("TextLabel")
+	text.BackgroundTransparency = 1
+	text.Position = UDim2.new(0, 8, 0, 28)
+	text.Size = UDim2.new(1, -16, 1, -34)
+	text.Font = Enum.Font.Gotham
+	text.TextSize = 14
+	text.TextColor3 = Color3.new(1, 1, 1)
+	text.TextWrapped = true
+	text.Parent = frame
+
+	return frame, title, text
+end
+
+singleFrame, singleTitle, singleText = createNotificationFrame()
+
+local function tween(obj, pos, dir)
+	TweenService:Create(obj, TweenInfo.new(0.35, Enum.EasingStyle.Quart, dir), {Position = pos}):Play()
+end
+
+local function notifySingle(title, text, length)
+	singleToken += 1
+	local token = singleToken
+	singleTitle.Text = title or "Invisible Tool"
+	singleText.Text = text or ""
+	tween(singleFrame, UDim2.new(1, -270, 1, -120), Enum.EasingDirection.Out)
+
+	task.delay(length or 5, function()
+		if token == singleToken then
+			tween(singleFrame, UDim2.new(1, -270, 1, 20), Enum.EasingDirection.In)
+		end
+	end)
+end
+
+local function notifyStack(title, text, length)
+	stackCount += 1
+	local slot = stackCount
+	local frame, titleLabel, textLabel = createNotificationFrame()
+	titleLabel.Text = title or "Invisible Tool"
+	textLabel.Text = text or ""
+
+	local yOffset = -120 - ((slot - 1) * 110)
+	tween(frame, UDim2.new(1, -270, 1, yOffset), Enum.EasingDirection.Out)
+
+	task.delay(length or 5, function()
+		tween(frame, UDim2.new(1, -270, 1, 20), Enum.EasingDirection.In)
+		task.wait(0.4)
+		if frame then frame:Destroy() end
+		stackCount = math.max(stackCount - 1, 0)
+	end)
 end
 
 -- ==================== GUI ====================
@@ -178,7 +271,7 @@ testNotifyBtn.Parent = content
 -- Tab Frame
 local tabFrame = Instance.new("Frame")
 tabFrame.LayoutOrder = 6
-tabFrame.Size = UDim2.new(1, 0, 1, -200) -- Will be updated dynamically
+tabFrame.Size = UDim2.new(1, 0, 1, -200)
 tabFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 tabFrame.Parent = content
 Instance.new("UICorner", tabFrame).CornerRadius = UDim.new(0, 4)
@@ -271,6 +364,19 @@ local function addLog(message)
 	logFrame.CanvasSize = UDim2.new(0,0,0, logFrame.UIListLayout.AbsoluteContentSize.Y)
 end
 
+local function notify(title, text, length) 
+	playNotifySound()
+	if NOTIFY_MODE == "stack" then
+		notifyStack(title, text, length)
+	else
+		notifySingle(title, text, length)
+	end
+	
+	print(("[Invisible Tool] %s: %s"):format(title or "Notify", text or ""))
+	setStatus(text or "")
+	addLog((title or "Notify") .. ": " .. (text or ""))
+end
+
 local function updateInvisibleList()
 	for _, v in ipairs(invisList:GetChildren()) do
 		if v:IsA("TextLabel") then v:Destroy() end
@@ -300,12 +406,6 @@ local function updateInvisibleList()
 		lbl.Parent = invisList
 	end
 	invisList.CanvasSize = UDim2.new(0,0,0, invisList.UIListLayout.AbsoluteContentSize.Y)
-end
-
-local function notify(title, message)
-	print(("[Invisible Tool] %s: %s"):format(title, message))
-	setStatus(message)
-	addLog(message)
 end
 
 -- Core Logic
@@ -452,6 +552,7 @@ local function cleanup()
 	end
 	for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
 	if gui then gui:Destroy() end
+	if NotifyGui then NotifyGui:Destroy() end
 end
 
 _G.InvisiblePlayerToolCleanup = cleanup
