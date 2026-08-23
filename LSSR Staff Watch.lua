@@ -2,7 +2,16 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-
+local function playNotifySound()
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://97972687450528"
+	sound.Volume = 0.7
+	sound.Parent = game:GetService("SoundService")
+	sound:Play()
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
+end
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -121,6 +130,7 @@ local function notifyStack(title, text, length)
 end
 
 local function notify(title, text, length)
+	playNotifySound()
 	if NOTIFY_MODE == "stack" then
 		notifyStack(title, text, length)
 	else
