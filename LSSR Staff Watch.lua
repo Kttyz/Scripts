@@ -6,7 +6,7 @@ local TweenService = game:GetService("TweenService")
 local function playNotifySound()
 	local sound = Instance.new("Sound")
 	sound.SoundId = "rbxassetid://97972687450528"
-	sound.Volume = 0.7
+	sound.Volume = 1.0
 	sound.Parent = game:GetService("SoundService")
 	sound:Play()
 	sound.Ended:Connect(function()
