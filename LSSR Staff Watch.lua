@@ -1,7 +1,8 @@
--- Player Watchlist / Staff Detector (Admins + Mods) + Fancy Notifications
+-- Player Watchlist / Staff Detector (Admins + Mods) + Fancy Notifications + Chat Monitor
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+
 local function playNotifySound()
 	local sound = Instance.new("Sound")
 	sound.SoundId = "rbxassetid://97972687450528"
@@ -12,24 +13,25 @@ local function playNotifySound()
 		sound:Destroy()
 	end)
 end
+
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ==================== CONFIG ====================
 local ADMIN_USERNAMES = {
-    "zog", "MerciElan", "unicornisforalljk",
+	"zog", "MerciElan", "unicornisforalljk",
 }
 local ADMIN_DISPLAYNAMES = {
-    "zog", "Knot", "Jerry",
+	"zog", "Knot", "Jerry",
 }
 local MOD_USERNAMES = {
-    "Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars", "loomisyy",
+	"Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars", "loomisyy",
 }
 local MOD_DISPLAYNAMES = {
-    "CharlieEatsNuggies", "Nai", "lee", "captor", "bec",
+	"CharlieEatsNuggies", "Nai", "lee", "captor", "bec",
 }
 
-local CHECK_INTERVAL = 0.5
+local CHECK_INTERVAL = 3
 local NOTIFY_MODE = "stack"
 -- ===============================================
 
@@ -136,7 +138,6 @@ local function notify(title, text, length)
 	else
 		notifySingle(title, text, length)
 	end
-	
 	addLog(title .. ": " .. text)
 	statusLabel.Text = text
 end
@@ -347,6 +348,29 @@ local function isWatched(player)
 	return nil
 end
 
+local function onStaffChatted(player, message)
+	local lower = string.lower(message)
+	local display = player.DisplayName
+
+	if string.find(lower, ";kick") then
+		addLog("[kick] [" .. display .. "]: " .. message)
+		notify("[" .. display .. "]", "Kicked someone", 5)
+	elseif string.find(lower, ";ban") then
+		addLog("[ban] [" .. display .. "]: " .. message)
+		notify("[" .. display .. "]", "Banned someone", 5)
+	end
+end
+
+local function watchStaffChat(player)
+	if player == LocalPlayer then return end
+	local category = isWatched(player)
+	if not category then return end
+
+	player.Chatted:Connect(function(message)
+		onStaffChatted(player, message)
+	end)
+end
+
 local function checkPlayers()
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
@@ -384,7 +408,7 @@ end
 
 _G.PlayerWatchlistCleanup = cleanup
 
--- Tab, Buttons, Drag, Resize (same as before)
+-- Tab, Buttons, Drag, Resize
 connect(playersTabBtn.MouseButton1Click, function()
 	playerList.Visible = true
 	logFrame.Visible = false
@@ -453,12 +477,20 @@ connect(UserInputService.InputEnded, function(input)
 end)
 
 -- Events
-connect(Players.PlayerAdded, function() task.wait(0.3); checkPlayers() end)
+connect(Players.PlayerAdded, function(player)
+	task.wait(1.5)
+	checkPlayers()
+	watchStaffChat(player)
+end)
 connect(Players.PlayerRemoving, checkPlayers)
 
 -- Start
 addLog("Player Watchlist loaded")
 notify("Watchlist", "Monitoring Admins + Mods", 5)
+
+for _, player in ipairs(Players:GetPlayers()) do
+	watchStaffChat(player)
+end
 
 while running and gui.Parent do
 	checkPlayers()
