@@ -29,7 +29,7 @@ local MOD_DISPLAYNAMES = {
     "CharlieEatsNuggies", "Nai", "lee", "captor", "bec",
 }
 
-local CHECK_INTERVAL = 3
+local CHECK_INTERVAL = 0.5
 local NOTIFY_MODE = "stack"
 -- ===============================================
 
@@ -453,7 +453,7 @@ connect(UserInputService.InputEnded, function(input)
 end)
 
 -- Events
-connect(Players.PlayerAdded, function() task.wait(1.5); checkPlayers() end)
+connect(Players.PlayerAdded, function() task.wait(0.3); checkPlayers() end)
 connect(Players.PlayerRemoving, checkPlayers)
 
 -- Start
