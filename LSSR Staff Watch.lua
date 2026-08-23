@@ -25,10 +25,10 @@ local ADMIN_DISPLAYNAMES = {
 	"zog", "Knot", "Jerry",
 }
 local MOD_USERNAMES = {
-	"Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars", "loomisyy",
+	"Alex_banned54", "DollszMaker", "55Love_5", "traceallmyscars", "loomisyy", "unhingedjaws",
 }
 local MOD_DISPLAYNAMES = {
-	"CharlieEatsNuggies", "Nai", "lee", "captor", "bec",
+	"CharlieEatsNuggies", "Nai", "lee", "captor", "bec", "unhingedjaws"
 }
 
 local CHECK_INTERVAL = 3
