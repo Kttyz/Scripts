@@ -26,13 +26,15 @@ local MOD_USERNAMES = {
 	"Ioomisyy", -- bec
 	"unhingedjaws", -- unhingedjaws
 	"solivne", -- kaia
+	"Valentinauwjekkuj4", -- Bunni
+	"paranoid4172", -- paranoid4172
 }
 
 local CHECK_INTERVAL = 3
 local NOTIFY_MODE = "stack" -- "stack" or "single"
 local MONITORED_COMMANDS = {
 	";kick", ";ban", ";smite", ";bring", ";fling",
-	";freeze", ";jail", ";unfreeze", ";unjail", ";re",
+	";freeze", ";jail", ";unfreeze", ";unjail", ";re", ";sword",
 }
 
 -- ===============================================
