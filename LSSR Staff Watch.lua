@@ -461,7 +461,7 @@ local function updatePlayerList()
 		local empty = Instance.new("TextLabel")
 		empty.Size = UDim2.new(1, 0, 0, 50)
 		empty.BackgroundTransparency = 1
-		empty.Text = "No watched players in game"
+		empty.Text = "No staff 😭"
 		empty.TextColor3 = Color3.fromRGB(140, 140, 150)
 		empty.Font = Enum.Font.GothamSemibold
 		empty.TextSize = 14
@@ -691,8 +691,8 @@ connect(Players.PlayerRemoving, function()
 	checkPlayers()
 end)
 
-addLog("Player Watchlist loaded")
-notify("Watchlist", "Monitoring Admins + Mods", 5)
+addLog("StaffWatch Loaded")
+notify("Watchlist", "Watching for Staff", 5)
 checkPlayers()
 
 while running and gui.Parent do
