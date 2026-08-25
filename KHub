@@ -1,0 +1,250 @@
+-- =========================================================
+--  Kttyz Hub
+-- =========================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+if _G.UnifiedHubCleanup then
+	pcall(_G.UnifiedHubCleanup)
+end
+
+local connections = {}
+local function connect(signal, callback)
+	local conn = signal:Connect(callback)
+	table.insert(connections, conn)
+	return conn
+end
+
+local LINKS = {
+	lssrsw = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/lssrsw.lua",
+	invis  = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/invis.lua",
+	fc     = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/fc.lua",
+	hubdsc = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/hubdsc",
+}
+
+-- =========================================================
+--  SHARED WINDOW
+-- =========================================================
+local gui = Instance.new("ScreenGui")
+gui.Name = "KttyzHubGui"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.fromOffset(420, 540)
+main.Position = UDim2.new(0, 20, 0.5, -270)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+main.BorderSizePixel = 0
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", main).Color = Color3.fromRGB(85, 85, 95)
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 34)
+titleBar.BackgroundTransparency = 1
+titleBar.Parent = main
+
+local function makePageIcon(emoji, order)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(32, 26)
+	btn.Position = UDim2.fromOffset(8 + (order - 1) * 36, 4)
+	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+	btn.Text = emoji
+	btn.TextSize = 16
+	btn.Font = Enum.Font.GothamBold
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.AutoButtonColor = false
+	btn.Parent = titleBar
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+	return btn
+end
+
+local homeBtn    = makePageIcon("K", 1)
+local lssrBtn    = makePageIcon("🛡️", 2)
+local invisBtn   = makePageIcon("👻", 3)
+local freecamBtn = makePageIcon("📷", 4)
+
+local function makeTopButton(text, color, xOffset)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(26, 26)
+	btn.Position = UDim2.new(1, xOffset, 0, 4)
+	btn.BackgroundColor3 = color
+	btn.Text = text
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.TextSize = 16
+	btn.Font = Enum.Font.GothamBold
+	btn.AutoButtonColor = false
+	btn.Parent = titleBar
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+	return btn
+end
+
+local minimizeBtn = makeTopButton("-", Color3.fromRGB(70, 70, 80), -62)
+local closeBtn    = makeTopButton("X", Color3.fromRGB(130, 60, 65), -32)
+
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -20, 1, -50)
+content.Position = UDim2.fromOffset(10, 40)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+local pages = {
+	home    = Instance.new("Frame"),
+	lssr    = Instance.new("Frame"),
+	invis   = Instance.new("Frame"),
+	freecam = Instance.new("Frame"),
+}
+
+for name, page in pairs(pages) do
+	page.Size = UDim2.fromScale(1, 1)
+	page.BackgroundTransparency = 1
+	page.Visible = false
+	page.Parent = content
+end
+
+local function showPage(name)
+	for n, p in pairs(pages) do
+		p.Visible = (n == name)
+	end
+	homeBtn.BackgroundColor3    = name == "home"    and Color3.fromRGB(55, 120, 80) or Color3.fromRGB(45, 45, 55)
+	lssrBtn.BackgroundColor3    = name == "lssr"    and Color3.fromRGB(55, 120, 80) or Color3.fromRGB(45, 45, 55)
+	invisBtn.BackgroundColor3   = name == "invis"   and Color3.fromRGB(55, 120, 80) or Color3.fromRGB(45, 45, 55)
+	freecamBtn.BackgroundColor3 = name == "freecam" and Color3.fromRGB(55, 120, 80) or Color3.fromRGB(45, 45, 55)
+end
+
+connect(homeBtn.MouseButton1Click,    function() showPage("home") end)
+connect(lssrBtn.MouseButton1Click,    function() showPage("lssr") end)
+connect(invisBtn.MouseButton1Click,   function() showPage("invis") end)
+connect(freecamBtn.MouseButton1Click, function() showPage("freecam") end)
+
+-- Drag
+local dragging, dragStart, startPos = false, nil, nil
+connect(titleBar.InputBegan, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = main.Position
+	end
+end)
+connect(UserInputService.InputChanged, function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStart
+		main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+connect(UserInputService.InputEnded, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+
+-- Minimize
+local minimized = false
+local expandedSize = Vector2.new(420, 540)
+connect(minimizeBtn.MouseButton1Click, function()
+	minimized = not minimized
+	content.Visible = not minimized
+	minimizeBtn.Text = minimized and "+" or "-"
+	main.Size = UDim2.fromOffset(expandedSize.X, minimized and 34 or expandedSize.Y)
+end)
+
+-- =========================================================
+--  HOME PAGE
+-- =========================================================
+local homePage = pages.home
+
+local welcomeLabel = Instance.new("TextLabel")
+welcomeLabel.Size = UDim2.new(1, 0, 0, 40)
+welcomeLabel.Position = UDim2.fromOffset(0, 20)
+welcomeLabel.BackgroundTransparency = 1
+welcomeLabel.Text = "Welcome to Kttyz Hub"
+welcomeLabel.TextColor3 = Color3.fromRGB(245, 245, 245)
+welcomeLabel.TextSize = 22
+welcomeLabel.Font = Enum.Font.GothamBold
+welcomeLabel.Parent = homePage
+
+local descLabel = Instance.new("TextLabel")
+descLabel.Size = UDim2.new(1, 0, 1, -70)
+descLabel.Position = UDim2.fromOffset(0, 70)
+descLabel.BackgroundTransparency = 1
+descLabel.Text = "Loading description..."
+descLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+descLabel.TextSize = 15
+descLabel.Font = Enum.Font.Gotham
+descLabel.TextXAlignment = Enum.TextXAlignment.Left
+descLabel.TextYAlignment = Enum.TextYAlignment.Top
+descLabel.TextWrapped = true
+descLabel.Parent = homePage
+
+task.spawn(function()
+	local success, result = pcall(function()
+		return game:HttpGet(LINKS.hubdsc)
+	end)
+	if success and result then
+		descLabel.Text = result
+	else
+		descLabel.Text = "Could not load description."
+	end
+end)
+
+-- =========================================================
+--  LOAD MODULES INTO PAGES
+-- =========================================================
+local function loadModule(pageName, url)
+	local page = pages[pageName]
+	local status = Instance.new("TextLabel")
+	status.Size = UDim2.new(1, 0, 0, 30)
+	status.Position = UDim2.fromOffset(0, 10)
+	status.BackgroundTransparency = 1
+	status.Text = "Loading..."
+	status.TextColor3 = Color3.fromRGB(180, 180, 190)
+	status.TextSize = 14
+	status.Font = Enum.Font.Gotham
+	status.Parent = page
+
+	task.spawn(function()
+		local success, err = pcall(function()
+			_G.UnifiedHubLoading = true
+			_G.HubPageParent = page          -- tell the script where to put its GUI
+			local code = game:HttpGet(url)
+			loadstring(code)()
+			_G.UnifiedHubLoading = false
+			_G.HubPageParent = nil
+		end)
+
+		if success then
+			status:Destroy()
+		else
+			status.Text = "Failed to load"
+			status.TextColor3 = Color3.fromRGB(220, 100, 100)
+			warn("[Kttyz Hub] Failed to load " .. pageName .. ":", err)
+		end
+	end)
+end
+
+loadModule("lssr", LINKS.lssrsw)
+loadModule("invis", LINKS.invis)
+loadModule("freecam", LINKS.fc)
+
+-- =========================================================
+--  CLEANUP
+-- =========================================================
+local function cleanup()
+	if _G.PlayerWatchlistCleanup then pcall(_G.PlayerWatchlistCleanup) end
+	if _G.InvisiblePlayerToolCleanup then pcall(_G.InvisiblePlayerToolCleanup) end
+	if _G.FreecamCleanup then pcall(_G.FreecamCleanup) end
+
+	for _, c in ipairs(connections) do
+		pcall(function() c:Disconnect() end)
+	end
+	if gui then gui:Destroy() end
+end
+
+_G.UnifiedHubCleanup = cleanup
+connect(closeBtn.MouseButton1Click, cleanup)
+
+showPage("home")
