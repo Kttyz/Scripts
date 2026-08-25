@@ -26,7 +26,6 @@ local MOD_USERNAMES = {
 	"Ioomisyy", -- bec
 	"unhingedjaws", -- unhingedjaws
 	"solivne", -- kaia
-	"Valentinauwjekkuj4", -- Bunni
 	"paranoid4172", -- paranoid4172
 }
 
@@ -496,50 +495,50 @@ end
 
 local function onChatMessage(message)
 	if not message or not message.TextSource then return end
+
 	local userId = message.TextSource.UserId
 	if not userId then return end
+
 	local player = Players:GetPlayerByUserId(userId)
-	if not player or player == LocalPlayer or not isWatched(player) then return end
+	if not player then return end
+
 	local chatMessage = message.Text or ""
 	local lowerMessage = string.lower(chatMessage)
 	local command
+
 	for _, monitoredCommand in ipairs(MONITORED_COMMANDS) do
 		if string.find(lowerMessage, monitoredCommand, 1, true) then
 			command = string.sub(monitoredCommand, 2)
 			break
 		end
 	end
-	if command then
-		addLog("[" .. command .. "] [" .. player.DisplayName .. "] (@" .. player.Name .. "): " .. chatMessage)
-		playNotifySound()
-		notifyStack("[" .. player.DisplayName .. "]", "Used ;" .. command .. "\n" .. chatMessage, 5)
-		statusLabel.Text = player.DisplayName .. " used ;" .. command
-	end
-end
 
-connect(TextChatService.MessageReceived, onChatMessage)
+	if not command then return end
 
--- ==================== PLAYER CHECK ====================
+	local staffRole = isWatched(player)
+	local title
 
-local function checkPlayers()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			local category = isWatched(player)
-			if category and not watchedPlayers[player] then
-				watchedPlayers[player] = true
-				playerData[player] = { username = player.Name, displayName = player.DisplayName, category = category }
-				notify("[" .. category .. "]", player.DisplayName .. " (@" .. player.Name .. ") **JOINED**", 6)
-			end
-		end
+	if staffRole then
+		title = "[" .. staffRole .. "] [" .. player.DisplayName .. "]"
+	else
+		title = "[Potential Staff] [" .. player.Name .. "]"
 	end
-	for player, data in pairs(playerData) do
-		if not player.Parent then
-			notify("[" .. data.category .. "]", data.displayName .. " (@" .. data.username .. ") **LEFT**", 5)
-			watchedPlayers[player] = nil
-			playerData[player] = nil
-		end
-	end
-	updatePlayerList()
+
+	addLog(
+		title
+			.. " used ;"
+			.. command
+			.. " — "
+			.. player.DisplayName
+			.. " (@"
+			.. player.Name
+			.. "): "
+			.. chatMessage
+	)
+
+	playNotifySound()
+	notifyStack(title, "Used ;" .. command .. "\n" .. chatMessage, 5)
+	statusLabel.Text = title .. " used ;" .. command
 end
 
 -- ==================== CUSTOM WATCH SELECTION ====================
