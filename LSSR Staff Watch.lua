@@ -541,6 +541,49 @@ local function onChatMessage(message)
 	statusLabel.Text = title .. " used ;" .. command
 end
 
+connect(TextChatService.MessageReceived, onChatMessage)
+
+-- ==================== PLAYER CHECK ====================
+
+local function checkPlayers()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			local category = isWatched(player)
+
+			if category and not watchedPlayers[player] then
+				watchedPlayers[player] = true
+
+				playerData[player] = {
+					username = player.Name,
+					displayName = player.DisplayName,
+					category = category,
+				}
+
+				notify(
+					"[" .. category .. "]",
+					player.DisplayName .. " (@" .. player.Name .. ") **JOINED**",
+					6
+				)
+			end
+		end
+	end
+
+	for player, data in pairs(playerData) do
+		if not player.Parent then
+			notify(
+				"[" .. data.category .. "]",
+				data.displayName .. " (@" .. data.username .. ") **LEFT**",
+				5
+			)
+
+			watchedPlayers[player] = nil
+			playerData[player] = nil
+		end
+	end
+
+	updatePlayerList()
+end
+
 -- ==================== CUSTOM WATCH SELECTION ====================
 
 connect(customWatchButton.MouseButton1Click, function()
