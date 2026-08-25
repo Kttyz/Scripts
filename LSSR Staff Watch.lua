@@ -26,8 +26,8 @@ local MOD_USERNAMES = {
 	"Ioomisyy", -- bec
 	"unhingedjaws", -- unhingedjaws
 	"solivne", -- kaia
-	"paranoid4172", -- paranoid4172
 	"owdadaouch", -- heh/daniel
+	"paranoid4172", -- paranoid4172
 }
 
 local CHECK_INTERVAL = 3
@@ -624,8 +624,11 @@ connect(UserInputService.InputBegan, function(input, gameProcessed)
 		emoji = "❔",
 		customRole = "Unknown",
 	}
-	addLog("[Custom] Added " .. player.DisplayName .. " (@" .. player.Name .. ") as Unknown")
-	statusLabel.Text = "Added " .. player.DisplayName .. " as ❔ Unknown"
+	notify(
+		"[Watchlist]",
+		"Added " .. player.DisplayName .. " (@" .. player.Name .. ") as ❔ Unknown",
+		4
+	)
 	updatePlayerList()
 end)
 
@@ -634,8 +637,11 @@ connect(saveButton.MouseButton1Click, function()
 		local data = playerData[editingPlayer]
 		data.emoji = emojiInput.Text ~= "" and emojiInput.Text or "❔"
 		data.customRole = roleInput.Text ~= "" and roleInput.Text or "Unknown"
-		addLog("[Custom] Updated " .. data.displayName .. " to " .. data.emoji .. " " .. data.customRole)
-		statusLabel.Text = "Updated " .. data.displayName .. " to " .. data.customRole
+		notify(
+			"[Watchlist]",
+			"Updated " .. data.displayName .. " to " .. data.emoji .. " " .. data.customRole,
+			4
+		)
 		updatePlayerList()
 	end
 	editorOverlay.Visible = false
@@ -650,8 +656,11 @@ end)
 connect(removeButton.MouseButton1Click, function()
 	if editingPlayer and playerData[editingPlayer] and playerData[editingPlayer].category == "Custom" then
 		local data = playerData[editingPlayer]
-		addLog("[Custom] Removed " .. data.displayName .. " (@" .. data.username .. ") from watchlist")
-		statusLabel.Text = "Removed " .. data.displayName .. " from the watchlist"
+		notify(
+			"[Watchlist]",
+			"Removed " .. data.displayName .. " (@" .. data.username .. ") from watchlist",
+			4
+		)
 		watchedPlayers[editingPlayer] = nil
 		playerData[editingPlayer] = nil
 		updatePlayerList()
