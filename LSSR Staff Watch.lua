@@ -27,6 +27,7 @@ local MOD_USERNAMES = {
 	"unhingedjaws", -- unhingedjaws
 	"solivne", -- kaia
 	"paranoid4172", -- paranoid4172
+	"owdadaouch", -- heh/daniel
 }
 
 local CHECK_INTERVAL = 3
