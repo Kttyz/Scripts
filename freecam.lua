@@ -1,5 +1,5 @@
--- Simple Freecam (LocalScript)
--- F6: toggle | WASD: move | Q/E: down/up | Shift: faster | Hold right mouse: look
+-- Freecam Module (for Unified Hub)
+-- F6 (or custom key): toggle | WASD: move | Q/E: up/down | Shift: faster | Right mouse: look
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
+
 local TOGGLE_KEY = Enum.KeyCode.F6
 local NORMAL_SPEED = 32
 local FAST_SPEED = 90
@@ -102,7 +103,6 @@ local function setEnabled(shouldEnable)
 		camera.CameraType = savedCameraType or Enum.CameraType.Custom
 		camera.CameraSubject = savedCameraSubject
 		unfreezeCharacter()
-		-- Always release the cursor, even if F6 was pressed while looking.
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
 	end
