@@ -1,7 +1,4 @@
 -- Invisible Player Tool - LOCAL ONLY (Fixed & Improved)
--- Dual-mode: works standalone or when loaded by the Unified Hub
--- Transparency flashing bug fixed
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -21,8 +18,6 @@ end
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local IS_HUB = _G.UnifiedHubLoading == true
-
 local TRANSPARENCY_ENABLED = true
 local OUTLINE_ENABLED = true
 local TARGET_TRANSPARENCY = 0.5
@@ -34,7 +29,7 @@ local OUTLINE_COLOR = Color3.fromRGB(255, 255, 255)
 local OUTLINE_TRANSPARENCY = 0
 local FILL_TRANSPARENCY = 1
 
-local NOTIFY_MODE = "stack"
+local NOTIFY_MODE = "stack" -- "stack" or "single"
 
 local trackedInvisible = {}
 local originalParts = {}
@@ -43,8 +38,10 @@ local connections = {}
 local running = true
 local minimized = false
 local expandedSize = Vector2.new(300, 460)
+
 local logEntries = {}
 
+-- Cleanup previous instance
 if _G.InvisiblePlayerToolCleanup then
 	pcall(_G.InvisiblePlayerToolCleanup)
 end
@@ -135,255 +132,238 @@ local function notifyStack(title, text, length)
 	end)
 end
 
--- ==================== GUI VARIABLES ====================
-local gui, main, titleBar, content, statusLabel
-local transparencyButton, outlineButton, scanLabel
-local checkVisibilityButton, actionKillButton, testNotifyBtn
-local invisTabBtn, logTabBtn, invisList, logFrame
-local minimizeButton, killButton, resizeHandle
-local minusButton, plusButton
+-- ==================== GUI ====================
+local gui = Instance.new("ScreenGui")
+gui.Name = "InvisiblePlayerToolGui"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
 
--- Forward declare
-local cleanup
-local updateGui
-local refreshEffects
-local manualCheckVisibility
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.fromOffset(expandedSize.X, expandedSize.Y)
+main.Position = UDim2.new(0, 20, 0.5, -230)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+main.BorderSizePixel = 0
+main.Parent = gui
 
--- ==================== CREATE GUI (standalone only) ====================
-if not IS_HUB then
-	gui = Instance.new("ScreenGui")
-	gui.Name = "InvisiblePlayerToolGui"
-	gui.ResetOnSpawn = false
-	gui.Parent = PlayerGui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", main).Color = Color3.fromRGB(85, 85, 95)
 
-	main = Instance.new("Frame")
-	main.Name = "Main"
-	main.Size = UDim2.fromOffset(expandedSize.X, expandedSize.Y)
-	main.Position = UDim2.new(0, 20, 0.5, -230)
-	main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-	main.BorderSizePixel = 0
-	main.Parent = gui
-	Instance.new("UICorner", main).CornerRadius = UDim.new(0, 6)
-	Instance.new("UIStroke", main).Color = Color3.fromRGB(85, 85, 95)
+local titleBar = Instance.new("TextLabel")
+titleBar.Size = UDim2.new(1, -76, 0, 34)
+titleBar.Position = UDim2.fromOffset(10, 0)
+titleBar.BackgroundTransparency = 1
+titleBar.Font = Enum.Font.GothamBold
+titleBar.Text = "Invisible Player Tool"
+titleBar.TextColor3 = Color3.fromRGB(245, 245, 245)
+titleBar.TextSize = 14
+titleBar.TextXAlignment = Enum.TextXAlignment.Left
+titleBar.Parent = main
 
-	titleBar = Instance.new("TextLabel")
-	titleBar.Size = UDim2.new(1, -76, 0, 34)
-	titleBar.Position = UDim2.fromOffset(10, 0)
-	titleBar.BackgroundTransparency = 1
-	titleBar.Font = Enum.Font.GothamBold
-	titleBar.Text = "Invisible Player Tool"
-	titleBar.TextColor3 = Color3.fromRGB(245, 245, 245)
-	titleBar.TextSize = 14
-	titleBar.TextXAlignment = Enum.TextXAlignment.Left
-	titleBar.Parent = main
-
-	local function makeTopButton(text, xOffset, color)
-		local button = Instance.new("TextButton")
-		button.Size = UDim2.fromOffset(26, 26)
-		button.Position = UDim2.new(1, xOffset, 0, 4)
-		button.BackgroundColor3 = color
-		button.BorderSizePixel = 0
-		button.Font = Enum.Font.GothamBold
-		button.Text = text
-		button.TextColor3 = Color3.fromRGB(255, 255, 255)
-		button.TextSize = 16
-		button.AutoButtonColor = false
-		button.Parent = main
-		Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
-		return button
-	end
-
-	minimizeButton = makeTopButton("-", -62, Color3.fromRGB(70, 70, 80))
-	killButton = makeTopButton("X", -32, Color3.fromRGB(130, 60, 65))
-
-	content = Instance.new("Frame")
-	content.Size = UDim2.new(1, -20, 1, -54)
-	content.Position = UDim2.fromOffset(10, 40)
-	content.BackgroundTransparency = 1
-	content.Parent = main
-
-	local layout = Instance.new("UIListLayout", content)
-	layout.Padding = UDim.new(0, 7)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-	local function styleButton(button, color)
-		button.BackgroundColor3 = color or Color3.fromRGB(55, 55, 65)
-		button.BorderSizePixel = 0
-		button.Font = Enum.Font.GothamBold
-		button.TextColor3 = Color3.fromRGB(255, 255, 255)
-		button.TextSize = 13
-		button.AutoButtonColor = false
-		Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
-	end
-
-	local function createButton(order)
-		local button = Instance.new("TextButton")
-		button.LayoutOrder = order
-		button.Size = UDim2.new(1, 0, 0, 34)
-		styleButton(button)
-		button.Parent = content
-		return button
-	end
-
-	transparencyButton = createButton(1)
-	outlineButton = createButton(2)
-
-	local scanControl = Instance.new("Frame")
-	scanControl.LayoutOrder = 3
-	scanControl.Size = UDim2.new(1, 0, 0, 34)
-	scanControl.BackgroundTransparency = 1
-	scanControl.Parent = content
-
-	minusButton = Instance.new("TextButton")
-	minusButton.Size = UDim2.fromOffset(34, 34)
-	minusButton.Text = "-"
-	minusButton.TextSize = 18
-	styleButton(minusButton)
-	minusButton.Parent = scanControl
-
-	scanLabel = Instance.new("TextLabel")
-	scanLabel.Size = UDim2.new(1, -76, 1, 0)
-	scanLabel.Position = UDim2.fromOffset(38, 0)
-	scanLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 53)
-	scanLabel.BorderSizePixel = 0
-	scanLabel.Font = Enum.Font.GothamBold
-	scanLabel.TextColor3 = Color3.fromRGB(235, 235, 235)
-	scanLabel.TextSize = 12
-	scanLabel.Parent = scanControl
-	Instance.new("UICorner", scanLabel).CornerRadius = UDim.new(0, 4)
-
-	plusButton = Instance.new("TextButton")
-	plusButton.Size = UDim2.fromOffset(34, 34)
-	plusButton.Position = UDim2.new(1, -34, 0, 0)
-	plusButton.Text = "+"
-	plusButton.TextSize = 18
-	styleButton(plusButton)
-	plusButton.Parent = scanControl
-
-	local actionRow = Instance.new("Frame")
-	actionRow.LayoutOrder = 4
-	actionRow.Size = UDim2.new(1, 0, 0, 34)
-	actionRow.BackgroundTransparency = 1
-	actionRow.Parent = content
-
-	checkVisibilityButton = Instance.new("TextButton")
-	checkVisibilityButton.Size = UDim2.new(0.5, -4, 1, 0)
-	checkVisibilityButton.Text = "Check Visibility"
-	styleButton(checkVisibilityButton, Color3.fromRGB(60, 80, 110))
-	checkVisibilityButton.Parent = actionRow
-
-	actionKillButton = Instance.new("TextButton")
-	actionKillButton.Size = UDim2.new(0.5, -4, 1, 0)
-	actionKillButton.Position = UDim2.new(0.5, 4, 0, 0)
-	actionKillButton.Text = "Kill Script"
-	styleButton(actionKillButton, Color3.fromRGB(130, 60, 65))
-	actionKillButton.Parent = actionRow
-
-	testNotifyBtn = Instance.new("TextButton")
-	testNotifyBtn.LayoutOrder = 5
-	testNotifyBtn.Size = UDim2.new(1, 0, 0, 34)
-	testNotifyBtn.Text = "Test Notify"
-	styleButton(testNotifyBtn, Color3.fromRGB(70, 100, 140))
-	testNotifyBtn.Parent = content
-
-	local tabFrame = Instance.new("Frame")
-	tabFrame.LayoutOrder = 6
-	tabFrame.Size = UDim2.new(1, 0, 1, -200)
-	tabFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-	tabFrame.Parent = content
-	Instance.new("UICorner", tabFrame).CornerRadius = UDim.new(0, 4)
-
-	local tabButtons = Instance.new("Frame")
-	tabButtons.Size = UDim2.new(1, 0, 0, 30)
-	tabButtons.BackgroundTransparency = 1
-	tabButtons.Parent = tabFrame
-
-	invisTabBtn = Instance.new("TextButton")
-	invisTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-	invisTabBtn.Text = "Invisible Players"
-	invisTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
-	invisTabBtn.Parent = tabButtons
-	Instance.new("UICorner", invisTabBtn)
-
-	logTabBtn = Instance.new("TextButton")
-	logTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
-	logTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
-	logTabBtn.Text = "Log"
-	logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-	logTabBtn.Parent = tabButtons
-	Instance.new("UICorner", logTabBtn)
-
-	invisList = Instance.new("ScrollingFrame")
-	invisList.Size = UDim2.new(1, 0, 1, -30)
-	invisList.Position = UDim2.new(0, 0, 0, 30)
-	invisList.BackgroundTransparency = 1
-	invisList.ScrollBarThickness = 4
-	invisList.Parent = tabFrame
-	Instance.new("UIListLayout", invisList).Padding = UDim.new(0, 2)
-
-	logFrame = Instance.new("ScrollingFrame")
-	logFrame.Size = UDim2.new(1, 0, 1, -30)
-	logFrame.Position = UDim2.new(0, 0, 0, 30)
-	logFrame.BackgroundTransparency = 1
-	logFrame.ScrollBarThickness = 4
-	logFrame.Visible = false
-	logFrame.Parent = tabFrame
-	Instance.new("UIListLayout", logFrame).Padding = UDim.new(0, 2)
-
-	statusLabel = Instance.new("TextLabel")
-	statusLabel.LayoutOrder = 7
-	statusLabel.Size = UDim2.new(1, 0, 0, 24)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Font = Enum.Font.Gotham
-	statusLabel.Text = "Ready"
-	statusLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
-	statusLabel.TextSize = 11
-	statusLabel.TextWrapped = true
-	statusLabel.Parent = content
-
-	resizeHandle = Instance.new("TextLabel")
-	resizeHandle.Size = UDim2.fromOffset(22, 22)
-	resizeHandle.Position = UDim2.new(1, -22, 1, -22)
-	resizeHandle.BackgroundTransparency = 1
-	resizeHandle.Font = Enum.Font.GothamBold
-	resizeHandle.Text = "///"
-	resizeHandle.TextColor3 = Color3.fromRGB(140, 140, 150)
-	resizeHandle.TextSize = 11
-	resizeHandle.TextXAlignment = Enum.TextXAlignment.Center
-	resizeHandle.TextYAlignment = Enum.TextYAlignment.Center
-	resizeHandle.Parent = main
+local function makeTopButton(text, xOffset, color)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(26, 26)
+	button.Position = UDim2.new(1, xOffset, 0, 4)
+	button.BackgroundColor3 = color
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.GothamBold
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextSize = 16
+	button.AutoButtonColor = false
+	button.Parent = main
+	Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
+	return button
 end
+
+local minimizeButton = makeTopButton("-", -62, Color3.fromRGB(70, 70, 80))
+local killButton = makeTopButton("X", -32, Color3.fromRGB(130, 60, 65))
+
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -20, 1, -54)
+content.Position = UDim2.fromOffset(10, 40)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+local layout = Instance.new("UIListLayout", content)
+layout.Padding = UDim.new(0, 7)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function styleButton(button, color)
+	button.BackgroundColor3 = color or Color3.fromRGB(55, 55, 65)
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.GothamBold
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextSize = 13
+	button.AutoButtonColor = false
+	Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
+end
+
+local function createButton(order)
+	local button = Instance.new("TextButton")
+	button.LayoutOrder = order
+	button.Size = UDim2.new(1, 0, 0, 34)
+	styleButton(button)
+	button.Parent = content
+	return button
+end
+
+local transparencyButton = createButton(1)
+local outlineButton = createButton(2)
+
+local scanControl = Instance.new("Frame")
+scanControl.LayoutOrder = 3
+scanControl.Size = UDim2.new(1, 0, 0, 34)
+scanControl.BackgroundTransparency = 1
+scanControl.Parent = content
+
+local minusButton = Instance.new("TextButton")
+minusButton.Size = UDim2.fromOffset(34, 34)
+minusButton.Text = "-"
+minusButton.TextSize = 18
+styleButton(minusButton)
+minusButton.Parent = scanControl
+
+local scanLabel = Instance.new("TextLabel")
+scanLabel.Size = UDim2.new(1, -76, 1, 0)
+scanLabel.Position = UDim2.fromOffset(38, 0)
+scanLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 53)
+scanLabel.BorderSizePixel = 0
+scanLabel.Font = Enum.Font.GothamBold
+scanLabel.TextColor3 = Color3.fromRGB(235, 235, 235)
+scanLabel.TextSize = 12
+scanLabel.Parent = scanControl
+Instance.new("UICorner", scanLabel).CornerRadius = UDim.new(0, 4)
+
+local plusButton = Instance.new("TextButton")
+plusButton.Size = UDim2.fromOffset(34, 34)
+plusButton.Position = UDim2.new(1, -34, 0, 0)
+plusButton.Text = "+"
+plusButton.TextSize = 18
+styleButton(plusButton)
+plusButton.Parent = scanControl
+
+local actionRow = Instance.new("Frame")
+actionRow.LayoutOrder = 4
+actionRow.Size = UDim2.new(1, 0, 0, 34)
+actionRow.BackgroundTransparency = 1
+actionRow.Parent = content
+
+local checkVisibilityButton = Instance.new("TextButton")
+checkVisibilityButton.Size = UDim2.new(0.5, -4, 1, 0)
+checkVisibilityButton.Text = "Check Visibility"
+styleButton(checkVisibilityButton, Color3.fromRGB(60, 80, 110))
+checkVisibilityButton.Parent = actionRow
+
+local actionKillButton = Instance.new("TextButton")
+actionKillButton.Size = UDim2.new(0.5, -4, 1, 0)
+actionKillButton.Position = UDim2.new(0.5, 4, 0, 0)
+actionKillButton.Text = "Kill Script"
+styleButton(actionKillButton, Color3.fromRGB(130, 60, 65))
+actionKillButton.Parent = actionRow
+
+local testNotifyBtn = Instance.new("TextButton")
+testNotifyBtn.LayoutOrder = 5
+testNotifyBtn.Size = UDim2.new(1, 0, 0, 34)
+testNotifyBtn.Text = "Test Notify"
+styleButton(testNotifyBtn, Color3.fromRGB(70, 100, 140))
+testNotifyBtn.Parent = content
+
+-- Tab Frame
+local tabFrame = Instance.new("Frame")
+tabFrame.LayoutOrder = 6
+tabFrame.Size = UDim2.new(1, 0, 1, -200)
+tabFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+tabFrame.Parent = content
+Instance.new("UICorner", tabFrame).CornerRadius = UDim.new(0, 4)
+
+local tabButtons = Instance.new("Frame")
+tabButtons.Size = UDim2.new(1, 0, 0, 30)
+tabButtons.BackgroundTransparency = 1
+tabButtons.Parent = tabFrame
+
+local invisTabBtn = Instance.new("TextButton")
+invisTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+invisTabBtn.Text = "Invisible Players"
+invisTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
+invisTabBtn.Parent = tabButtons
+Instance.new("UICorner", invisTabBtn)
+
+local logTabBtn = Instance.new("TextButton")
+logTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+logTabBtn.Position = UDim2.new(0.5, 0, 0, 0)
+logTabBtn.Text = "Log"
+logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+logTabBtn.Parent = tabButtons
+Instance.new("UICorner", logTabBtn)
+
+local invisList = Instance.new("ScrollingFrame")
+invisList.Size = UDim2.new(1, 0, 1, -30)
+invisList.Position = UDim2.new(0, 0, 0, 30)
+invisList.BackgroundTransparency = 1
+invisList.ScrollBarThickness = 4
+invisList.Parent = tabFrame
+Instance.new("UIListLayout", invisList).Padding = UDim.new(0, 2)
+
+local logFrame = Instance.new("ScrollingFrame")
+logFrame.Size = UDim2.new(1, 0, 1, -30)
+logFrame.Position = UDim2.new(0, 0, 0, 30)
+logFrame.BackgroundTransparency = 1
+logFrame.ScrollBarThickness = 4
+logFrame.Visible = false
+logFrame.Parent = tabFrame
+Instance.new("UIListLayout", logFrame).Padding = UDim.new(0, 2)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.LayoutOrder = 7
+statusLabel.Size = UDim2.new(1, 0, 0, 24)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Text = "Ready"
+statusLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
+statusLabel.TextSize = 11
+statusLabel.TextWrapped = true
+statusLabel.Parent = content
+
+local resizeHandle = Instance.new("TextLabel")
+resizeHandle.Size = UDim2.fromOffset(22, 22)
+resizeHandle.Position = UDim2.new(1, -22, 1, -22)
+resizeHandle.BackgroundTransparency = 1
+resizeHandle.Font = Enum.Font.GothamBold
+resizeHandle.Text = "///"
+resizeHandle.TextColor3 = Color3.fromRGB(140, 140, 150)
+resizeHandle.TextSize = 11
+resizeHandle.TextXAlignment = Enum.TextXAlignment.Center
+resizeHandle.TextYAlignment = Enum.TextYAlignment.Center
+resizeHandle.Parent = main
 
 -- ==================== FUNCTIONS ====================
 local function setStatus(message)
-	if statusLabel then
-		statusLabel.Text = message
-	end
+	statusLabel.Text = message
 end
 
 local function addLog(message)
 	table.insert(logEntries, 1, os.date("%H:%M:%S") .. " | " .. message)
 	if #logEntries > 50 then table.remove(logEntries) end
 
-	if logFrame then
-		for _, v in ipairs(logFrame:GetChildren()) do
-			if v:IsA("TextLabel") then v:Destroy() end
-		end
-		for _, msg in ipairs(logEntries) do
-			local lbl = Instance.new("TextLabel")
-			lbl.Size = UDim2.new(1, -10, 0, 26)
-			lbl.BackgroundTransparency = 1
-			lbl.Text = msg
-			lbl.TextColor3 = Color3.new(1, 1, 1)
-			lbl.TextSize = 14
-			lbl.Font = Enum.Font.GothamSemibold
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.TextWrapped = true
-			lbl.Parent = logFrame
-		end
-		logFrame.CanvasSize = UDim2.new(0, 0, 0, logFrame.UIListLayout.AbsoluteContentSize.Y)
+	for _, v in ipairs(logFrame:GetChildren()) do
+		if v:IsA("TextLabel") then v:Destroy() end
 	end
+
+	for _, msg in ipairs(logEntries) do
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.new(1, -10, 0, 26)
+		lbl.BackgroundTransparency = 1
+		lbl.Text = msg
+		lbl.TextColor3 = Color3.new(1, 1, 1)
+		lbl.TextSize = 14
+		lbl.Font = Enum.Font.GothamSemibold
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.TextWrapped = true
+		lbl.Parent = logFrame
+	end
+	logFrame.CanvasSize = UDim2.new(0, 0, 0, logFrame.UIListLayout.AbsoluteContentSize.Y)
 end
 
 local function notify(title, text, length)
@@ -399,8 +379,6 @@ local function notify(title, text, length)
 end
 
 local function updateInvisibleList()
-	if not invisList then return end
-
 	for _, v in ipairs(invisList:GetChildren()) do
 		if v:IsA("TextLabel") then v:Destroy() end
 	end
@@ -470,6 +448,7 @@ local function restoreTransparency(player)
 		end
 		originalParts[player] = nil
 	end
+
 	if highlights[player] then
 		highlights[player]:Destroy()
 		highlights[player] = nil
@@ -507,8 +486,9 @@ local function applyOutline(player)
 	highlights[player] = hl
 end
 
-refreshEffects = function(player)
+local function refreshEffects(player)
 	restoreTransparency(player)
+
 	if TRANSPARENCY_ENABLED then
 		applyTransparency(player)
 	else
@@ -517,6 +497,7 @@ refreshEffects = function(player)
 			part.LocalTransparencyModifier = 0
 		end
 	end
+
 	if OUTLINE_ENABLED then
 		applyOutline(player)
 	end
@@ -527,7 +508,7 @@ local function restorePlayer(player)
 	trackedInvisible[player] = nil
 end
 
--- Fixed: do not re-check already tracked players
+-- Fixed: do not re-check already tracked players (stops flashing)
 local function updateInvisiblePlayers()
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
@@ -542,7 +523,7 @@ local function updateInvisiblePlayers()
 	updateInvisibleList()
 end
 
-manualCheckVisibility = function()
+local function manualCheckVisibility()
 	local count = 0
 	for player in pairs(trackedInvisible) do
 		restoreTransparency(player)
@@ -560,8 +541,7 @@ manualCheckVisibility = function()
 	end
 end
 
-updateGui = function()
-	if not transparencyButton then return end
+local function updateGui()
 	transparencyButton.Text = "Transparency: " .. (TRANSPARENCY_ENABLED and "ON" or "OFF")
 	transparencyButton.BackgroundColor3 = TRANSPARENCY_ENABLED and Color3.fromRGB(55, 120, 80) or Color3.fromRGB(90, 55, 60)
 
@@ -571,7 +551,7 @@ updateGui = function()
 	scanLabel.Text = ("Scan interval: %.2fs"):format(CHECK_INTERVAL)
 end
 
-cleanup = function()
+local function cleanup()
 	running = false
 	for player in pairs(trackedInvisible) do
 		restorePlayer(player)
@@ -585,106 +565,107 @@ end
 
 _G.InvisiblePlayerToolCleanup = cleanup
 
--- ==================== STANDALONE BUTTONS ====================
-if not IS_HUB then
-	connect(transparencyButton.MouseButton1Click, function()
-		TRANSPARENCY_ENABLED = not TRANSPARENCY_ENABLED
-		updateGui()
-		for player in pairs(trackedInvisible) do
-			refreshEffects(player)
-		end
-	end)
+-- ==================== BUTTONS & EVENTS ====================
+connect(transparencyButton.MouseButton1Click, function()
+	TRANSPARENCY_ENABLED = not TRANSPARENCY_ENABLED
+	updateGui()
+	for player in pairs(trackedInvisible) do
+		refreshEffects(player)
+	end
+end)
 
-	connect(outlineButton.MouseButton1Click, function()
-		OUTLINE_ENABLED = not OUTLINE_ENABLED
-		updateGui()
-		for player in pairs(trackedInvisible) do
-			refreshEffects(player)
-		end
-	end)
+connect(outlineButton.MouseButton1Click, function()
+	OUTLINE_ENABLED = not OUTLINE_ENABLED
+	updateGui()
+	for player in pairs(trackedInvisible) do
+		refreshEffects(player)
+	end
+end)
 
-	connect(minusButton.MouseButton1Click, function()
-		CHECK_INTERVAL = math.max(0.25, CHECK_INTERVAL - 0.25)
-		updateGui()
-	end)
+connect(minusButton.MouseButton1Click, function()
+	CHECK_INTERVAL = math.max(0.25, CHECK_INTERVAL - 0.25)
+	updateGui()
+end)
 
-	connect(plusButton.MouseButton1Click, function()
-		CHECK_INTERVAL = math.min(10, CHECK_INTERVAL + 0.25)
-		updateGui()
-	end)
+connect(plusButton.MouseButton1Click, function()
+	CHECK_INTERVAL = math.min(10, CHECK_INTERVAL + 0.25)
+	updateGui()
+end)
 
-	connect(checkVisibilityButton.MouseButton1Click, manualCheckVisibility)
-	connect(killButton.MouseButton1Click, cleanup)
-	connect(actionKillButton.MouseButton1Click, cleanup)
+connect(checkVisibilityButton.MouseButton1Click, manualCheckVisibility)
+connect(killButton.MouseButton1Click, cleanup)
+connect(actionKillButton.MouseButton1Click, cleanup)
 
-	connect(testNotifyBtn.MouseButton1Click, function()
-		notify("Test", "Test notification successful!")
-	end)
+connect(testNotifyBtn.MouseButton1Click, function()
+	notify("Test", "Test notification successful!")
+end)
 
-	connect(invisTabBtn.MouseButton1Click, function()
-		invisList.Visible = true
-		logFrame.Visible = false
-		invisTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
-		logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-	end)
+-- Tab Switching
+connect(invisTabBtn.MouseButton1Click, function()
+	invisList.Visible = true
+	logFrame.Visible = false
+	invisTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
+	logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+end)
 
-	connect(logTabBtn.MouseButton1Click, function()
-		invisList.Visible = false
-		logFrame.Visible = true
-		logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
-		invisTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-	end)
+connect(logTabBtn.MouseButton1Click, function()
+	invisList.Visible = false
+	logFrame.Visible = true
+	logTabBtn.BackgroundColor3 = Color3.fromRGB(55, 120, 80)
+	invisTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+end)
 
-	-- Drag
-	local dragging, dragStart, startPosition = false, nil, nil
-	connect(titleBar.InputBegan, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragging = true
-			dragStart = input.Position
-			startPosition = main.Position
-		end
-	end)
-	connect(UserInputService.InputChanged, function(input)
-		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-			local delta = input.Position - dragStart
-			main.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
-		end
-	end)
-	connect(UserInputService.InputEnded, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-	end)
+-- Drag
+local dragging = false
+local dragStart, startPosition
+connect(titleBar.InputBegan, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPosition = main.Position
+	end
+end)
+connect(UserInputService.InputChanged, function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStart
+		main.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+	end
+end)
+connect(UserInputService.InputEnded, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
 
-	-- Resize
-	local resizing, resizeStart, startSize = false, nil, nil
-	connect(resizeHandle.InputBegan, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			resizing = true
-			resizeStart = input.Position
-			startSize = main.AbsoluteSize
-		end
-	end)
-	connect(UserInputService.InputChanged, function(input)
-		if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
-			local delta = input.Position - resizeStart
-			local w = math.clamp(startSize.X + delta.X, 280, 520)
-			local h = math.clamp(startSize.Y + delta.Y, 400, 600)
-			expandedSize = Vector2.new(w, h)
-			main.Size = UDim2.fromOffset(w, h)
-		end
-	end)
-	connect(UserInputService.InputEnded, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
-	end)
+-- Resize
+local resizing = false
+local resizeStart, startSize
+connect(resizeHandle.InputBegan, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		resizing = true
+		resizeStart = input.Position
+		startSize = main.AbsoluteSize
+	end
+end)
+connect(UserInputService.InputChanged, function(input)
+	if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - resizeStart
+		local w = math.clamp(startSize.X + delta.X, 280, 520)
+		local h = math.clamp(startSize.Y + delta.Y, 400, 600)
+		expandedSize = Vector2.new(w, h)
+		main.Size = UDim2.fromOffset(w, h)
+	end
+end)
+connect(UserInputService.InputEnded, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
+end)
 
-	-- Minimize
-	connect(minimizeButton.MouseButton1Click, function()
-		minimized = not minimized
-		content.Visible = not minimized
-		resizeHandle.Visible = not minimized
-		minimizeButton.Text = minimized and "+" or "-"
-		main.Size = UDim2.fromOffset(expandedSize.X, minimized and 34 or expandedSize.Y)
-	end)
-end
+-- Minimize
+connect(minimizeButton.MouseButton1Click, function()
+	minimized = not minimized
+	content.Visible = not minimized
+	resizeHandle.Visible = not minimized
+	minimizeButton.Text = minimized and "+" or "-"
+	main.Size = UDim2.fromOffset(expandedSize.X, minimized and 34 or expandedSize.Y)
+end)
 
 -- Player watching
 local function watchPlayer(player)
@@ -708,18 +689,13 @@ for _, player in ipairs(Players:GetPlayers()) do
 	watchPlayer(player)
 end
 
--- Start
-if not IS_HUB then
-	updateGui()
-end
+-- Initial setup
+updateGui()
 addLog("Tool loaded successfully")
 setStatus("Invisible Player Tool loaded")
 
-while running do
-	if IS_HUB or (gui and gui.Parent) then
-		updateInvisiblePlayers()
-		task.wait(CHECK_INTERVAL)
-	else
-		break
-	end
+-- Main Loop
+while running and gui.Parent do
+	updateInvisiblePlayers()
+	task.wait(CHECK_INTERVAL)
 end
