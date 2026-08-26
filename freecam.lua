@@ -1,4 +1,4 @@
--- Freecam (Standalone GUI)
+-- Freecam (Standalone GUI) - Fixed Close Button
 -- F6 (or custom key): toggle | WASD: move | Q/E: up/down | Shift: faster | Right mouse: look
 
 local Players = game:GetService("Players")
@@ -24,6 +24,7 @@ local looking = false
 local keysDown = {}
 local yaw, pitch = 0, 0
 local cameraPosition
+local running = true
 
 local savedCameraType
 local savedCameraSubject
@@ -35,6 +36,8 @@ local savedJumpPower
 local savedJumpHeight
 local savedUseJumpPower
 local savedAutoRotate
+
+local gui -- forward declare
 
 local function connect(signal, callback)
 	local connection = signal:Connect(callback)
@@ -110,18 +113,24 @@ local function setEnabled(shouldEnable)
 end
 
 local function cleanup()
+	running = false
 	setEnabled(false)
+
 	for _, connection in ipairs(connections) do
 		pcall(function() connection:Disconnect() end)
 	end
 	connections = {}
-	if gui then gui:Destroy() end
+
+	if gui and gui.Parent then
+		gui:Destroy()
+	end
+	gui = nil
 end
 
 _G.FreecamCleanup = cleanup
 
 -- ==================== GUI ====================
-local gui = Instance.new("ScreenGui")
+gui = Instance.new("ScreenGui")
 gui.Name = "FreecamGui"
 gui.ResetOnSpawn = false
 gui.Parent = PlayerGui
@@ -308,6 +317,8 @@ end)
 
 -- ==================== INPUT ====================
 connect(UserInputService.InputBegan, function(input, gameProcessed)
+	if not running then return end
+
 	if waitingForKey and input.KeyCode ~= Enum.KeyCode.Unknown then
 		TOGGLE_KEY = input.KeyCode
 		keybindBtn.Text = "Current: " .. input.KeyCode.Name
@@ -335,6 +346,8 @@ connect(UserInputService.InputBegan, function(input, gameProcessed)
 end)
 
 connect(UserInputService.InputEnded, function(input)
+	if not running then return end
+
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		looking = false
 		if enabled then
@@ -347,14 +360,15 @@ connect(UserInputService.InputEnded, function(input)
 end)
 
 connect(UserInputService.InputChanged, function(input)
-	if enabled and looking and input.UserInputType == Enum.UserInputType.MouseMovement then
+	if not running or not enabled or not looking then return end
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
 		yaw -= input.Delta.X * LOOK_SENSITIVITY
 		pitch = math.clamp(pitch - input.Delta.Y * LOOK_SENSITIVITY, math.rad(-89), math.rad(89))
 	end
 end)
 
 connect(RunService.RenderStepped, function(deltaTime)
-	if not enabled then return end
+	if not running or not enabled then return end
 	local camera = getCamera()
 	if not camera then return end
 
