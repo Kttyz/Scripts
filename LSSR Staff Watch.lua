@@ -15,6 +15,7 @@ local ADMIN_USERNAMES = {
 	"zog", -- zog
 	"MerciElan", -- Knot
 	"unicornisforalljk", -- Jerry
+	"sickgf6" -- bec
 }
 local MOD_USERNAMES = {
 	"Alex_banned54", -- CharlieEatsNuggies
