@@ -9,7 +9,7 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 -- ==================== CONFIG ====================
 local DEVELOPER_USERNAMES = {
-	-- none yet, or i forgot the user lol
+	"yotsukemo", -- WhatNoiAmARealPerson
 }
 local ADMIN_USERNAMES = {
 	"zog", -- zog
