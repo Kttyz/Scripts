@@ -8,6 +8,9 @@ local SoundService = game:GetService("SoundService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 -- ==================== CONFIG ====================
+local DEVELOPER_USERNAMES = {
+	-- none yet, or i forgot the user lol
+}
 local ADMIN_USERNAMES = {
 	"zog", -- zog
 	"MerciElan", -- Knot
@@ -25,9 +28,7 @@ local MOD_USERNAMES = {
 	"paranoid4172", -- paranoid4172
 	"9stcrs", -- bunni222
 	"pinkzoey7", -- seagull
-}
-local DEVELOPER_USERNAMES = {
-	-- add developer usernames here
+	"dollrxst", -- tea
 }
 local CHECK_INTERVAL = 3
 local NOTIFY_MODE = "stack" -- "stack" or "single"
