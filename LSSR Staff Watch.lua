@@ -30,6 +30,7 @@ local MOD_USERNAMES = {
 	"9stcrs", -- bunni222
 	"pinkzoey7", -- seagull
 	"dollrxst", -- tea
+	"luvmizzy", -- mizzy
 }
 local CHECK_INTERVAL = 3
 local NOTIFY_MODE = "stack" -- "stack" or "single"
