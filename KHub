@@ -1,4 +1,5 @@
--- KHub - Universal Script Hub (Full Update)
+-- KHub - Universal Script Hub (Verified Scripts page added)
+-- Fixed grid alignment + startup/click/close sounds
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -20,7 +21,7 @@ local function connect(sig, cb)
 	return c
 end
 
--- ==================== SAVE SYSTEM ====================
+-- ==================== SAVE ====================
 local SAVE_FILE = "KHub_Save.json"
 local defaultSave = {
 	keybinds = {},
@@ -29,7 +30,7 @@ local defaultSave = {
 	minZoom = 1,
 	spinSpeed = 20,
 	animSpeed = 1,
-	clickSound = "rbxassetid://97972687450528",
+	clickSound = "rbxassetid://12221976",
 	circlePos = "TopRight",
 	window = {w = 440, h = 560},
 	colors = {
@@ -53,6 +54,11 @@ local function loadSave()
 end
 
 local saveData = loadSave()
+-- force new default click sound if old one was saved
+if saveData.clickSound == "rbxassetid://97972687450528" then
+	saveData.clickSound = "rbxassetid://12221976"
+end
+
 local function writeSave()
 	if writefile then pcall(function() writefile(SAVE_FILE, HttpService:JSONEncode(saveData)) end) end
 end
@@ -61,17 +67,25 @@ local function rgb(t) return Color3.fromRGB(t[1] or 255, t[2] or 255, t[3] or 25
 local col = saveData.colors
 
 -- ==================== SOUND ====================
-local function playClick()
+local function playSound(id, vol)
 	local s = Instance.new("Sound")
-	s.SoundId = saveData.clickSound or "rbxassetid://97972687450528"
-	s.Volume = 0.7
+	s.SoundId = id
+	s.Volume = vol or 0.7
 	s.Parent = SoundService
 	s:Play()
 	s.Ended:Connect(function() s:Destroy() end)
 end
 
-local function playNotifySound()
-	playClick()
+local function playClick()
+	playSound(saveData.clickSound or "rbxassetid://12221976", 0.7)
+end
+
+local function playStartup()
+	playSound("rbxassetid://134881862056957", 0.8)
+end
+
+local function playClose()
+	playSound("rbxassetid://131592082231258", 0.8)
 end
 
 -- ==================== NOTIFY ====================
@@ -82,7 +96,7 @@ NotifyGui.Parent = PlayerGui
 
 local stackCount = 0
 local function notify(titleText, bodyText, length)
-	playNotifySound()
+	playClick()
 	stackCount += 1
 	local slot = stackCount
 	local frame = Instance.new("Frame")
@@ -129,7 +143,7 @@ local function notify(titleText, bodyText, length)
 	end)
 end
 
--- ==================== MAIN GUI (Centered) ====================
+-- ==================== MAIN GUI ====================
 local gui = Instance.new("ScreenGui")
 gui.Name = "KHub"
 gui.ResetOnSpawn = false
@@ -149,7 +163,7 @@ mainStroke.Color = rgb(col.accent)
 
 local expandedSize = Vector2.new(saveData.window.w or 440, saveData.window.h or 560)
 
--- ==================== SPLASH (INSIDE GUI) ====================
+-- Splash inside GUI
 local splashFrame = Instance.new("Frame")
 splashFrame.Size = UDim2.fromScale(1, 1)
 splashFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
@@ -190,15 +204,17 @@ TweenService:Create(ssub, TweenInfo.new(0.35), {TextTransparency = 1}):Play()
 TweenService:Create(splashFrame, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
 task.wait(0.45)
 splashFrame:Destroy()
+playStartup()
 
--- ==================== TITLE BAR ====================
+-- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 36)
 titleBar.BackgroundTransparency = 1
+titleBar.Active = true
 titleBar.Parent = main
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(0.3, 0, 1, 0)
+titleLabel.Size = UDim2.new(0.25, 0, 1, 0)
 titleLabel.Position = UDim2.fromOffset(12, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Font = Enum.Font.GothamBold
@@ -234,11 +250,12 @@ local function makeTopBtn(text, color, offset)
 	return btn
 end
 
+local verifiedBtn = makeTopBtn("✓", Color3.fromRGB(50, 110, 80), -130)
 local settingsBtn = makeTopBtn("⚙", Color3.fromRGB(60, 70, 90), -100)
 local minimizeBtn = makeTopBtn("-", Color3.fromRGB(70, 70, 80), -70)
 local closeBtn = makeTopBtn("X", Color3.fromRGB(140, 55, 60), -38)
 
--- ==================== MINIMIZE CIRCLE ====================
+-- Minimize circle
 local minCircle = Instance.new("TextButton")
 minCircle.Size = UDim2.fromOffset(48, 48)
 minCircle.BackgroundColor3 = rgb(col.mainBg)
@@ -288,7 +305,7 @@ local function updateMinCirclePos()
 end
 updateMinCirclePos()
 
--- ==================== PAGES ====================
+-- Pages
 local content = Instance.new("ScrollingFrame")
 content.Name = "MainPage"
 content.Size = UDim2.new(1, -16, 1, -48)
@@ -303,8 +320,26 @@ local grid = Instance.new("UIGridLayout")
 grid.CellSize = UDim2.fromOffset(195, 80)
 grid.CellPadding = UDim2.fromOffset(8, 8)
 grid.FillDirectionMaxCells = 2
+grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+grid.VerticalAlignment = Enum.VerticalAlignment.Top
 grid.SortOrder = Enum.SortOrder.LayoutOrder
 grid.Parent = content
+
+local verifiedPage = Instance.new("ScrollingFrame")
+verifiedPage.Name = "VerifiedPage"
+verifiedPage.Size = content.Size
+verifiedPage.Position = content.Position
+verifiedPage.BackgroundTransparency = 1
+verifiedPage.BorderSizePixel = 0
+verifiedPage.ScrollBarThickness = 4
+verifiedPage.Visible = false
+verifiedPage.Parent = main
+
+local verifiedList = Instance.new("UIListLayout")
+verifiedList.Padding = UDim.new(0, 8)
+verifiedList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+verifiedList.SortOrder = Enum.SortOrder.LayoutOrder
+verifiedList.Parent = verifiedPage
 
 local settingsPage = Instance.new("ScrollingFrame")
 settingsPage.Name = "SettingsPage"
@@ -318,6 +353,7 @@ settingsPage.Parent = main
 
 local settingsList = Instance.new("UIListLayout")
 settingsList.Padding = UDim.new(0, 8)
+settingsList.HorizontalAlignment = Enum.HorizontalAlignment.Center
 settingsList.SortOrder = Enum.SortOrder.LayoutOrder
 settingsList.Parent = settingsPage
 
@@ -330,6 +366,19 @@ resizeHandle.Text = "///"
 resizeHandle.TextColor3 = Color3.fromRGB(140, 140, 150)
 resizeHandle.TextSize = 11
 resizeHandle.Parent = main
+
+local function updateGridLayout()
+	local w = main.AbsoluteSize.X
+	if w < 50 then w = expandedSize.X end
+
+	local columns = 2
+	if w > 640 then columns = 3 end
+	if w > 860 then columns = 4 end
+
+	grid.FillDirectionMaxCells = columns
+	local cellW = math.floor((w - 30 - (columns - 1) * 8) / columns)
+	grid.CellSize = UDim2.fromOffset(math.clamp(cellW, 165, 220), 80)
+end
 
 -- ==================== STATE ====================
 local features = {
@@ -356,6 +405,7 @@ local keybindButtons = {}
 local featureBoxes = {}
 local currentPage = "main"
 local minimized = false
+local draggingBox = nil
 
 -- ==================== HELPERS ====================
 local function getRoot(char)
@@ -462,7 +512,6 @@ local function setOutlines(s)
 	if s then updateOutlines() else clearHL(features.Outlines.highlights) end
 end
 
--- Player Glow - FIXED equal brightness
 local GLOW_BRIGHTNESS = 1.4
 local GLOW_RANGE = 9
 local GLOW_DIST = 55
@@ -473,14 +522,13 @@ local function updateGlow()
 	if not features.PlayerGlow.enabled then return end
 	local myRoot = getRoot(LocalPlayer.Character)
 	if not myRoot then return end
-
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= LocalPlayer and plr.Character then
 			local root = getRoot(plr.Character)
 			if root and (root.Position - myRoot.Position).Magnitude <= GLOW_DIST then
 				local light = Instance.new("PointLight")
 				light.Color = Color3.fromRGB(160, 210, 255)
-				light.Brightness = GLOW_BRIGHTNESS   -- always the same
+				light.Brightness = GLOW_BRIGHTNESS
 				light.Range = GLOW_RANGE
 				light.Parent = root
 				features.PlayerGlow.lights[plr] = light
@@ -552,7 +600,6 @@ local function setSpin(state, speed)
 	end
 end
 
--- One-shots (same as before)
 local function doReset()
 	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
 	if hum then hum:ChangeState(Enum.HumanoidStateType.Dead)
@@ -675,7 +722,6 @@ end
 local function loadAudioLogger() loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/audiologger.lua"))() end
 local function loadDex() loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))() end
 local function loadF3X() loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/f3x.lua"))() end
-local function loadFreecam() loadstring(game:HttpGet("https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/freecam.lua"))() end
 
 local function refreshVisuals()
 	task.wait(0.4)
@@ -685,11 +731,8 @@ end
 connect(Players.PlayerAdded, function(p) p.CharacterAdded:Connect(refreshVisuals) end)
 for _, p in ipairs(Players:GetPlayers()) do p.CharacterAdded:Connect(refreshVisuals) end
 
--- ==================== BOX CREATOR + DRAG ====================
+-- ==================== MAIN PAGE BOXES ====================
 local nextOrder = 1
-local draggingBox = nil
-local dragOffset = Vector2.zero
-
 local function createBox(name, opts)
 	opts = opts or {}
 	local isToggle = opts.toggle
@@ -758,7 +801,6 @@ local function createBox(name, opts)
 	actionBtn.Parent = box
 	Instance.new("UICorner", actionBtn).CornerRadius = UDim.new(0, 4)
 
-	-- Drag handle
 	local dragHandle = Instance.new("TextButton")
 	dragHandle.Size = UDim2.fromOffset(20, 16)
 	dragHandle.Position = UDim2.new(1, -22, 1, -18)
@@ -780,18 +822,14 @@ local function createBox(name, opts)
 		keyBtn.BackgroundColor3 = Color3.fromRGB(140, 100, 50)
 	end)
 
-	-- Drag start
 	dragHandle.MouseButton1Down:Connect(function()
 		draggingBox = box
-		local mouse = UserInputService:GetMouseLocation()
-		dragOffset = Vector2.new(mouse.X - box.AbsolutePosition.X, mouse.Y - box.AbsolutePosition.Y)
 		box.ZIndex = 10
 	end)
 
 	return box, actionBtn, inputBox
 end
 
--- Create boxes
 local _, flyBtn = createBox("Fly", {toggle = true})
 local _, espBtn = createBox("ESP", {toggle = true})
 local _, outlinesBtn = createBox("Outlines", {toggle = true})
@@ -804,7 +842,6 @@ local _, iyBtn = createBox("Load IY")
 local _, audioBtn = createBox("AudioLogger")
 local _, dexBtn = createBox("Dex")
 local _, f3xBtn = createBox("F3X")
-local _, freecamBtn = createBox("Freecam")
 local _, resetBtn = createBox("Re/Reset")
 local _, fixCamBtn = createBox("FixCam")
 local _, noFogBtn = createBox("NoFog")
@@ -819,7 +856,6 @@ local _, animSpeedBtn, animSpeedInput = createBox("AnimSpeed", {input = true, de
 local _, viewBtn, viewInput = createBox("View", {input = true, placeholder = "username", buttonText = "View"})
 local _, gotoBtn, gotoInput = createBox("Goto", {input = true, placeholder = "username"})
 
--- Restore toggles
 local function applyToggleVisual(btn, state)
 	btn.Text = state and "ON" or "OFF"
 	btn.BackgroundColor3 = state and rgb(col.toggleOn) or rgb(col.toggleOff)
@@ -833,7 +869,6 @@ if saveData.toggles.AntiFling then setAntiFling(true) applyToggleVisual(antiFlin
 if saveData.toggles.WalkFling then setWalkFling(true) applyToggleVisual(walkFlingBtn, true) end
 if saveData.toggles.Spin then setSpin(true, saveData.spinSpeed) applyToggleVisual(spinBtn, true) end
 
--- Wire
 local function wireToggle(btn, name, setter)
 	btn.MouseButton1Click:Connect(function()
 		playClick()
@@ -858,7 +893,6 @@ end)
 audioBtn.MouseButton1Click:Connect(function() playClick() loadAudioLogger() audioBtn.Text = "Loaded!" task.delay(1.1, function() audioBtn.Text = "Run" end) end)
 dexBtn.MouseButton1Click:Connect(function() playClick() loadDex() dexBtn.Text = "Loaded!" task.delay(1.1, function() dexBtn.Text = "Run" end) end)
 f3xBtn.MouseButton1Click:Connect(function() playClick() loadF3X() f3xBtn.Text = "Loaded!" task.delay(1.1, function() f3xBtn.Text = "Run" end) end)
-freecamBtn.MouseButton1Click:Connect(function() playClick() loadFreecam() freecamBtn.Text = "Loaded!" task.delay(1.1, function() freecamBtn.Text = "Run" end) end)
 resetBtn.MouseButton1Click:Connect(function() playClick() doReset() end)
 fixCamBtn.MouseButton1Click:Connect(function() playClick() doFixCam() end)
 noFogBtn.MouseButton1Click:Connect(function() playClick() doNoFog() end)
@@ -901,17 +935,8 @@ viewBtn.MouseButton1Click:Connect(function()
 end)
 gotoBtn.MouseButton1Click:Connect(function() playClick() doGoto(gotoInput.Text) end)
 
--- Drag logic
-connect(UserInputService.InputChanged, function(input)
-	if draggingBox and input.UserInputType == Enum.UserInputType.MouseMovement then
-		local mouse = UserInputService:GetMouseLocation()
-		-- simple visual follow (reorder on release)
-	end
-end)
-
 connect(UserInputService.InputEnded, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 and draggingBox then
-		-- Find closest box and swap LayoutOrder
 		local closest, closestDist = nil, math.huge
 		for _, data in pairs(featureBoxes) do
 			if data.box ~= draggingBox then
@@ -922,7 +947,7 @@ connect(UserInputService.InputEnded, function(input)
 				end
 			end
 		end
-		if closest and closestDist < 120 then
+		if closest and closestDist < 140 then
 			local temp = draggingBox.LayoutOrder
 			draggingBox.LayoutOrder = closest.LayoutOrder
 			closest.LayoutOrder = temp
@@ -936,7 +961,76 @@ local function updateCanvas()
 	content.CanvasSize = UDim2.new(0, 0, 0, grid.AbsoluteContentSize.Y + 12)
 end
 grid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
-task.defer(updateCanvas)
+
+task.defer(function()
+	updateGridLayout()
+	updateCanvas()
+end)
+
+-- ==================== VERIFIED SCRIPTS PAGE ====================
+local verifiedScripts = {
+	{name = "LSSR Staff Watch", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/LSSR%20Staff%20Watch.lua"},
+	{name = "Invis Player Search", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/InvisPlayers.lua"},
+	{name = "Freecam", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/freecam.lua"},
+}
+
+for i, scriptData in ipairs(verifiedScripts) do
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, -16, 0, 56)
+	box.BackgroundColor3 = rgb(col.boxBg)
+	box.BorderSizePixel = 0
+	box.LayoutOrder = i
+	box.Parent = verifiedPage
+	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -100, 1, 0)
+	nameLabel.Position = UDim2.fromOffset(12, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = scriptData.name
+	nameLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+	nameLabel.TextSize = 14
+	nameLabel.Font = Enum.Font.GothamSemibold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = box
+
+	local runBtn = Instance.new("TextButton")
+	runBtn.Size = UDim2.fromOffset(70, 28)
+	runBtn.Position = UDim2.new(1, -82, 0.5, -14)
+	runBtn.BackgroundColor3 = rgb(col.button)
+	runBtn.Text = "Run"
+	runBtn.TextColor3 = Color3.new(1, 1, 1)
+	runBtn.TextSize = 13
+	runBtn.Font = Enum.Font.GothamBold
+	runBtn.AutoButtonColor = false
+	runBtn.Parent = box
+	Instance.new("UICorner", runBtn).CornerRadius = UDim.new(0, 5)
+
+	runBtn.MouseButton1Click:Connect(function()
+		playClick()
+		local ok, err = pcall(function()
+			loadstring(game:HttpGet(scriptData.url))()
+		end)
+		if ok then
+			runBtn.Text = "Loaded!"
+			runBtn.BackgroundColor3 = rgb(col.toggleOn)
+			notify("Verified", scriptData.name .. " loaded")
+			task.delay(1.4, function()
+				runBtn.Text = "Run"
+				runBtn.BackgroundColor3 = rgb(col.button)
+			end)
+		else
+			notify("Error", "Failed to load " .. scriptData.name)
+		end
+	end)
+end
+
+task.defer(function()
+	verifiedPage.CanvasSize = UDim2.new(0, 0, 0, verifiedList.AbsoluteContentSize.Y + 16)
+end)
+verifiedList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	verifiedPage.CanvasSize = UDim2.new(0, 0, 0, verifiedList.AbsoluteContentSize.Y + 16)
+end)
 
 -- ==================== KEYBINDS ====================
 connect(UserInputService.InputBegan, function(input, gp)
@@ -1046,7 +1140,6 @@ local function addColorPicker(name, colorKey)
 			saveData.colors[colorKey] = col[colorKey]
 			writeSave()
 			preview.BackgroundColor3 = rgb(col[colorKey])
-			-- apply live
 			if colorKey == "mainBg" then main.BackgroundColor3 = rgb(col.mainBg)
 			elseif colorKey == "accent" then mainStroke.Color = rgb(col.accent) minCircle:FindFirstChildOfClass("UIStroke").Color = rgb(col.accent)
 			elseif colorKey == "boxBg" then for _, d in pairs(featureBoxes) do d.box.BackgroundColor3 = rgb(col.boxBg) end
@@ -1060,7 +1153,6 @@ local function addColorPicker(name, colorKey)
 				end
 			end
 		end)
-		return box
 	end
 	makeRGBBox(1, 10)
 	makeRGBBox(2, 70)
@@ -1076,8 +1168,7 @@ addColorPicker("Toggle OFF", "toggleOff")
 addColorPicker("Accent / Stroke", "accent")
 
 addSettingsLabel("Minimize Circle Position")
-local positions = {"TopRight", "MidRight", "BottomRight", "BottomMiddle", "BottomLeft", "MiddleLeft", "TopMiddle", "TopLeft"}
-for _, pos in ipairs(positions) do
+for _, pos in ipairs({"TopRight", "MidRight", "BottomRight", "BottomMiddle", "BottomLeft", "MiddleLeft", "TopMiddle", "TopLeft"}) do
 	addSettingsButton(pos, function()
 		saveData.circlePos = pos
 		writeSave()
@@ -1142,16 +1233,28 @@ task.spawn(function()
 	end
 end)
 
+local function showPage(page)
+	content.Visible = page == "main"
+	verifiedPage.Visible = page == "verified"
+	settingsPage.Visible = page == "settings"
+	currentPage = page
+end
+
+connect(verifiedBtn.MouseButton1Click, function()
+	playClick()
+	if currentPage == "verified" then
+		showPage("main")
+	else
+		showPage("verified")
+	end
+end)
+
 connect(settingsBtn.MouseButton1Click, function()
 	playClick()
-	if currentPage == "main" then
-		content.Visible = false
-		settingsPage.Visible = true
-		currentPage = "settings"
+	if currentPage == "settings" then
+		showPage("main")
 	else
-		settingsPage.Visible = false
-		content.Visible = true
-		currentPage = "main"
+		showPage("settings")
 	end
 end)
 
@@ -1174,6 +1277,8 @@ connect(minCircle.MouseButton1Click, function()
 end)
 
 local function cleanup()
+	playClose()
+	task.wait(0.15)
 	setFly(false) setESP(false) setOutlines(false)
 	setAntiFling(false) setWalkFling(false) setPlayerGlow(false) setSpin(false)
 	doUnview()
@@ -1186,7 +1291,7 @@ end
 _G.KHubCleanup = cleanup
 connect(closeBtn.MouseButton1Click, function() playClick() cleanup() end)
 
--- Drag main window
+-- Drag main
 local dragging, dragStart, startPos
 connect(titleBar.InputBegan, function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1221,12 +1326,7 @@ connect(UserInputService.InputChanged, function(input)
 		local h = math.clamp(rSize.Y + d.Y, 340, 980)
 		expandedSize = Vector2.new(w, h)
 		main.Size = UDim2.fromOffset(w, h)
-		local columns = 2
-		if w > 640 then columns = 3 end
-		if w > 860 then columns = 4 end
-		grid.FillDirectionMaxCells = columns
-		local cellW = math.floor((w - 30 - (columns-1)*8) / columns)
-		grid.CellSize = UDim2.fromOffset(math.clamp(cellW, 165, 220), 80)
+		updateGridLayout()
 	end
 end)
 connect(UserInputService.InputEnded, function(input)
@@ -1240,4 +1340,4 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 notify("KHub", "Loaded successfully")
-print("[KHub] Full update loaded")
+print("[KHub] Grid alignment fixed + new sounds")
