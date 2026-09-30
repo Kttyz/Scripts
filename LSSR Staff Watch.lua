@@ -1,4 +1,4 @@
--- Player Watchlist / Staff Detector (Admins + Mods + Developers + Custom Watch)
+-- Player Watchlist / Staff Detector (Admins + Mods + Developers + Notable + Custom Watch)
 -- Fancy notifications, global TextChatService monitoring, and custom player labels.
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -12,12 +12,19 @@ local DEVELOPER_USERNAMES = {
 	"yotsukemo", -- WhatNoiAmARealPerson
 }
 local ADMIN_USERNAMES = {
-	"zog", -- zog
-	"MerciElan", -- Knot
 	"unicornisforalljk", -- Jerry
-	"sickgf6" -- bec
+	"sickgf6", -- bec
 }
 local MOD_USERNAMES = {
+	"pinkzoey7", -- seagull
+	"dollrxst", -- tea
+	"iuvmizzy", -- mizzy
+}
+local NOTABLE_USERNAMES = {
+	-- former admins i think?
+	"zog", -- zog
+	"MerciElan", -- Knot
+	-- former mods i think?
 	"Alex_banned54", -- CharlieEatsNuggies
 	"DollszMaker", -- Nai
 	"55Love_5", -- lee
@@ -28,9 +35,6 @@ local MOD_USERNAMES = {
 	"owdadaouch", -- heh/daniel
 	"paranoid4172", -- paranoid4172
 	"9stcrs", -- bunni222
-	"pinkzoey7", -- seagull
-	"dollrxst", -- tea
-	"luvmizzy", -- mizzy
 }
 local CHECK_INTERVAL = 3
 local NOTIFY_MODE = "stack" -- "stack" or "single"
@@ -152,6 +156,7 @@ titleBar.Text = "Player Watchlist"
 titleBar.TextColor3 = Color3.fromRGB(245, 245, 245)
 titleBar.TextSize = 14
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
+titleBar.Active = true
 titleBar.Parent = main
 local function makeTopButton(text, color, offset)
 	local button = Instance.new("TextButton")
@@ -365,16 +370,27 @@ local function updatePlayerList()
 			local isAdmin = data.category == "Admin"
 			local isMod = data.category == "Mod"
 			local isDev = data.category == "Developer"
+			local isNotable = data.category == "Notable"
 			local color = isAdmin and Color3.fromRGB(60, 30, 30)
 				or isMod and Color3.fromRGB(40, 45, 60)
 				or isDev and Color3.fromRGB(50, 55, 40)
+				or isNotable and Color3.fromRGB(70, 55, 30)
 				or Color3.fromRGB(60, 50, 85)
 			local textColor = isAdmin and Color3.fromRGB(255, 100, 100)
 				or isMod and Color3.fromRGB(100, 180, 255)
 				or isDev and Color3.fromRGB(180, 220, 120)
+				or isNotable and Color3.fromRGB(255, 200, 100)
 				or Color3.fromRGB(210, 180, 255)
-			local emoji = isAdmin and "👑" or isMod and "🛡️" or isDev and "🔨" or (data.emoji or "❔")
-			local rightRole = isAdmin and "ADMIN" or isMod and "MOD" or isDev and "DEV" or (data.customRole or "Unknown")
+			local emoji = isAdmin and "👑"
+				or isMod and "🛡️"
+				or isDev and "🔨"
+				or isNotable and "⭐"
+				or (data.emoji or "❔")
+			local rightRole = isAdmin and "ADMIN"
+				or isMod and "MOD"
+				or isDev and "DEV"
+				or isNotable and "NOTABLE"
+				or (data.customRole or "Unknown")
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, -8, 0, 36)
 			frame.BackgroundColor3 = color
@@ -404,7 +420,6 @@ local function updatePlayerList()
 			roleLabel.TextXAlignment = Enum.TextXAlignment.Right
 			roleLabel.TextTruncate = Enum.TextTruncate.AtEnd
 			roleLabel.Parent = frame
-			-- Only custom entries are clickable
 			if data.category == "Custom" then
 				local editRowButton = Instance.new("TextButton")
 				editRowButton.Size = UDim2.fromScale(1, 1)
@@ -440,6 +455,9 @@ local function isWatched(player)
 	end
 	for _, name in ipairs(DEVELOPER_USERNAMES) do
 		if username == string.lower(name) then return "Developer" end
+	end
+	for _, name in ipairs(NOTABLE_USERNAMES) do
+		if username == string.lower(name) then return "Notable" end
 	end
 	return nil
 end
