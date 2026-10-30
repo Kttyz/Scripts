@@ -1415,7 +1415,7 @@ task.spawn(function()
 			end
 			return nil
 		end
-
+			task.wait(0.7)
 		local function cmdPing()
 			local ms = getPingMs()
 			if ms then
@@ -1434,7 +1434,7 @@ task.spawn(function()
 
 		local function cmdCheck()
 			say("Checking khub status")
-			task.wait(0.1)
+			task.wait(5.3)
 			local ok, body = pcall(function()
 				return game:HttpGet(STATUS_URL)
 			end)
