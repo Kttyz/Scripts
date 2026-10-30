@@ -1345,128 +1345,179 @@ end)
 -- k!ping  → Pong! xxms
 -- k!hop   → server hop
 -- k!check → status from GitHub
+-- Fully isolated so failures never break the hub
 
-local TextChatService = game:GetService("TextChatService")
-local Stats = game:GetService("Stats")
+task.spawn(function()
+	local okAll, errAll = pcall(function()
+		local TextChatService = game:GetService("TextChatService")
+		local STATUS_URL = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/status.txt"
+		local CMD_PREFIX = "k!"
+		local lastCmdAt = 0
 
-local STATUS_URL = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/status.txt"
-local CMD_PREFIX = "k!"
-
-local function say(msg)
-	msg = tostring(msg)
-	-- Modern chat
-	local ok = pcall(function()
-		local channels = TextChatService:FindFirstChild("TextChannels")
-		local general = channels and (channels:FindFirstChild("RBXGeneral") or channels:FindFirstChild("General"))
-		if general then
-			general:SendAsync(msg)
-			return
-		end
-		-- fallback: first TextChannel
-		if channels then
-			for _, ch in ipairs(channels:GetChildren()) do
-				if ch:IsA("TextChannel") then
-					ch:SendAsync(msg)
+		local function say(msg)
+			msg = tostring(msg or "")
+			if msg == "" then return end
+			local sent = false
+			pcall(function()
+				local channels = TextChatService:FindFirstChild("TextChannels")
+				if not channels then
+					channels = TextChatService:WaitForChild("TextChannels", 3)
+				end
+				if not channels then return end
+				local general = channels:FindFirstChild("RBXGeneral")
+					or channels:FindFirstChild("General")
+					or channels:FindFirstChild("RBXSystem")
+				if general and general:IsA("TextChannel") then
+					general:SendAsync(msg)
+					sent = true
 					return
 				end
+				for _, ch in ipairs(channels:GetChildren()) do
+					if ch:IsA("TextChannel") then
+						ch:SendAsync(msg)
+						sent = true
+						return
+					end
+				end
+			end)
+			if not sent then
+				-- last resort: some executors expose this
+				pcall(function()
+					local chat = game:GetService("Chat")
+					if chat and chat.SubmitMessage then
+						chat:SubmitMessage(msg, "All")
+					end
+				end)
 			end
 		end
-	end)
-	if not ok then
-		-- Legacy fallback
+
+		local function getPingMs()
+			local ok, ping = pcall(function()
+				return math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000 + 0.5)
+			end)
+			if ok and type(ping) == "number" and ping >= 0 and ping < 100000 then
+				return ping
+			end
+			local ok2, val = pcall(function()
+				local stats = game:GetService("Stats")
+				local network = stats:FindFirstChild("Network")
+				if not network then return nil end
+				local item = network:FindFirstChild("ServerStatsItem")
+					or (network.ServerStatsItem and network.ServerStatsItem)
+				-- ServerStatsItem is often a map-like access
+				local dataPing = network.ServerStatsItem and network.ServerStatsItem["Data Ping"]
+				if not dataPing then return nil end
+				local s = dataPing:GetValueString()
+				return tonumber((tostring(s)):match("(%d+)"))
+			end)
+			if ok2 and type(val) == "number" then
+				return val
+			end
+			return nil
+		end
+
+		local function cmdPing()
+			local ms = getPingMs()
+			if ms then
+				say(("Pong! %dms"):format(ms))
+			else
+				say("Pong! (ping unavailable)")
+			end
+		end
+
+		local function cmdHop()
+			say("Server hopping...")
+			task.defer(function()
+				pcall(doServerHop)
+			end)
+		end
+
+		local function cmdCheck()
+			say("Checking khub status")
+			task.wait(0.1)
+			local ok, body = pcall(function()
+				return game:HttpGet(STATUS_URL)
+			end)
+			if ok and body and tostring(body) ~= "" then
+				local text = tostring(body):gsub("^%s+", ""):gsub("%s+$", "")
+				say("Status & Ver: " .. text)
+			else
+				say("Status & Ver: (failed to fetch)")
+			end
+		end
+
+		local commands = {
+			ping = cmdPing,
+			hop = cmdHop,
+			check = cmdCheck,
+		}
+
+		local function handleCommandMessage(raw)
+			if type(raw) ~= "string" then return end
+			local now = os.clock()
+			if now - lastCmdAt < 0.35 then return end -- debounce double fire
+
+			local msg = raw:gsub("^%s+", ""):gsub("%s+$", "")
+			local lower = string.lower(msg)
+			if string.sub(lower, 1, #CMD_PREFIX) ~= CMD_PREFIX then return end
+
+			local rest = string.sub(lower, #CMD_PREFIX + 1):gsub("^%s+", "")
+			local name = string.match(rest, "^(%S+)")
+			if not name then return end
+
+			local fn = commands[name]
+			if not fn then return end
+
+			lastCmdAt = now
+			task.spawn(function()
+				local ok, err = pcall(fn)
+				if not ok then
+					warn("[KHub] command error:", err)
+				end
+			end)
+		end
+
+		-- Prefer outgoing message hook when available (fires for local player only)
+		local hooked = false
 		pcall(function()
-			LocalPlayer:Chat(msg)
+			if TextChatService.SendingMessage then
+				connect(TextChatService.SendingMessage, function(props)
+					if props and props.Text then
+						handleCommandMessage(props.Text)
+					end
+				end)
+				hooked = true
+			end
 		end)
-	end
-end
 
-local function getPingMs()
-	-- Preferred
-	local ok, ping = pcall(function()
-		return math.floor(LocalPlayer:GetNetworkPing() * 1000 + 0.5)
+		pcall(function()
+			connect(TextChatService.MessageReceived, function(message)
+				if not message then return end
+				local source = message.TextSource
+				if not source or source.UserId ~= LocalPlayer.UserId then return end
+				handleCommandMessage(message.Text)
+			end)
+			hooked = true
+		end)
+
+		pcall(function()
+			connect(LocalPlayer.Chatted, function(msg)
+				handleCommandMessage(msg)
+			end)
+			hooked = true
+		end)
+
+		if hooked then
+			print("[KHub] Commands ready: k!ping | k!hop | k!check")
+		else
+			warn("[KHub] Chat command hooks failed (hub still works)")
+		end
 	end)
-	if ok and typeof(ping) == "number" and ping >= 0 then
-		return ping
+
+	if not okAll then
+		warn("[KHub] Chat commands failed to init:", errAll)
 	end
-	-- Fallback: performance stats string
-	local ok2, val = pcall(function()
-		local item = Stats.Network.ServerStatsItem["Data Ping"]
-		local s = item:GetValueString()
-		return tonumber((s:match("(%d+)")))
-	end)
-	if ok2 and val then
-		return val
-	end
-	return nil
-end
-
-local function cmdPing()
-	local ms = getPingMs()
-	if ms then
-		say(("Pong! %dms"):format(ms))
-	else
-		say("Pong! (ping unavailable)")
-	end
-end
-
-local function cmdHop()
-	say("Server hopping...")
-	task.defer(doServerHop)
-end
-
-local function cmdCheck()
-	say("Checking khub status")
-	task.wait(0.1)
-	local ok, body = pcall(function()
-		return game:HttpGet(STATUS_URL)
-	end)
-	if ok and body and body ~= "" then
-		local text = (tostring(body):gsub("[%c%s]+$", "")) -- trim trailing junk
-		say("Status & Ver: " .. text)
-	else
-		say("Status & Ver: (failed to fetch)")
-	end
-end
-
-local commands = {
-	ping = cmdPing,
-	hop = cmdHop,
-	check = cmdCheck,
-}
-
-local function handleCommandMessage(raw)
-	if type(raw) ~= "string" then return end
-	local msg = raw:gsub("^%s+", ""):gsub("%s+$", "")
-	local lower = msg:lower()
-	if lower:sub(1, #CMD_PREFIX) ~= CMD_PREFIX then return end
-
-	local rest = lower:sub(#CMD_PREFIX + 1):gsub("^%s+", "")
-	local name = rest:match("^(%S+)")
-	if not name then return end
-
-	local fn = commands[name]
-	if fn then
-		task.spawn(fn)
-	end
-end
-
--- TextChat (new)
-pcall(function()
-	connect(TextChatService.MessageReceived, function(message)
-		local source = message.TextSource
-		if not source or source.UserId ~= LocalPlayer.UserId then return end
-		handleCommandMessage(message.Text)
-	end)
 end)
-
--- Legacy chat
-pcall(function()
-	connect(LocalPlayer.Chatted, function(msg)
-		handleCommandMessage(msg)
-	end)
-end)
-
-print("[KHub] Commands: k!ping | k!hop | k!check")
 
 
 notify("KHub", "Loaded successfully")
