@@ -1426,13 +1426,14 @@ task.spawn(function()
 		end
 
 		local function cmdHop()
-			say("Server hopping...")
+			say("👋")
 			task.defer(function()
 				pcall(doServerHop)
 			end)
 		end
 
 		local function cmdCheck()
+			task.wait(5.3)
 			say("Checking khub status")
 			task.wait(5.3)
 			local ok, body = pcall(function()
