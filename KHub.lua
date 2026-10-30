@@ -1342,9 +1342,9 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 -- ==================== CHAT COMMANDS ====================
--- k!ping  → Pong! xxms
--- k!hop   → server hop
--- k!check → status from GitHub
+-- k!ping   → wait 0.3 → Pong! xxms
+-- k!hop    → wait 0.1 → 👋 → server hop
+-- k!status → wait 0.5 → checking → wait 5.3 → Status & Ver
 -- Fully isolated so failures never break the hub
 
 task.spawn(function()
@@ -1381,7 +1381,6 @@ task.spawn(function()
 				end
 			end)
 			if not sent then
-				-- last resort: some executors expose this
 				pcall(function()
 					local chat = game:GetService("Chat")
 					if chat and chat.SubmitMessage then
@@ -1402,9 +1401,6 @@ task.spawn(function()
 				local stats = game:GetService("Stats")
 				local network = stats:FindFirstChild("Network")
 				if not network then return nil end
-				local item = network:FindFirstChild("ServerStatsItem")
-					or (network.ServerStatsItem and network.ServerStatsItem)
-				-- ServerStatsItem is often a map-like access
 				local dataPing = network.ServerStatsItem and network.ServerStatsItem["Data Ping"]
 				if not dataPing then return nil end
 				local s = dataPing:GetValueString()
@@ -1415,8 +1411,9 @@ task.spawn(function()
 			end
 			return nil
 		end
-			task.wait(0.7)
+
 		local function cmdPing()
+			task.wait(0.3)
 			local ms = getPingMs()
 			if ms then
 				say(("Pong! %dms"):format(ms))
@@ -1426,14 +1423,15 @@ task.spawn(function()
 		end
 
 		local function cmdHop()
+			task.wait(0.1)
 			say("👋")
 			task.defer(function()
 				pcall(doServerHop)
 			end)
 		end
 
-		local function cmdCheck()
-			task.wait(0.3)
+		local function cmdStatus()
+			task.wait(0.5)
 			say("Checking khub status")
 			task.wait(5.3)
 			local ok, body = pcall(function()
@@ -1450,13 +1448,13 @@ task.spawn(function()
 		local commands = {
 			ping = cmdPing,
 			hop = cmdHop,
-			check = cmdCheck,
+			status = cmdStatus,
 		}
 
 		local function handleCommandMessage(raw)
 			if type(raw) ~= "string" then return end
 			local now = os.clock()
-			if now - lastCmdAt < 0.35 then return end -- debounce double fire
+			if now - lastCmdAt < 0.35 then return end
 
 			local msg = raw:gsub("^%s+", ""):gsub("%s+$", "")
 			local lower = string.lower(msg)
@@ -1478,7 +1476,6 @@ task.spawn(function()
 			end)
 		end
 
-		-- Prefer outgoing message hook when available (fires for local player only)
 		local hooked = false
 		pcall(function()
 			if TextChatService.SendingMessage then
@@ -1509,7 +1506,7 @@ task.spawn(function()
 		end)
 
 		if hooked then
-			print("[KHub] Commands ready: k!ping | k!hop | k!check")
+			print("[KHub] Commands ready: k!ping | k!hop | k!status")
 		else
 			warn("[KHub] Chat command hooks failed (hub still works)")
 		end
@@ -1520,6 +1517,37 @@ task.spawn(function()
 	end
 end)
 
+-- ==================== KEEP KHUB ON TELEPORT (always on) ====================
+-- Same pattern as Infinite Yield keepiy
+task.spawn(function()
+	local ok, err = pcall(function()
+		local queueteleport = (type(queue_on_teleport) == "function" and queue_on_teleport)
+			or (syn and type(syn.queue_on_teleport) == "function" and syn.queue_on_teleport)
+			or (fluxus and type(fluxus.queue_on_teleport) == "function" and fluxus.queue_on_teleport)
+			or nil
+
+		if not queueteleport then
+			warn("[KHub] queue_on_teleport missing — will not auto-load after hop")
+			return
+		end
+
+		local KHUB_URL = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/KHub.lua"
+		local queued = false
+
+		connect(LocalPlayer.OnTeleport, function()
+			if queued then return end
+			queued = true
+			pcall(function()
+				queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/KHub.lua"))()')
+			end)
+		end)
+
+		print("[KHub] Keep-on-teleport enabled")
+	end)
+	if not ok then
+		warn("[KHub] Keep-on-teleport init failed:", err)
+	end
+end)
 
 notify("KHub", "Loaded successfully")
-print("[KHub] Grid alignment fixed + new sounds")
+print("[KHub] Commands: k!ping | k!hop | k!status | keep-on-teleport on")
