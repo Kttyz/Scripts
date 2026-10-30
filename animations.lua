@@ -1,5 +1,5 @@
--- Animation Changer (Local) — Idle2 fixed
--- Idle1 default 71638717540676 | Idle2 default 76158324638472
+-- Animation Changer (Local)
+-- Idle1 = loop | Idle2 = fidget 5–15s | does not override emote wheel
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -63,18 +63,21 @@ end
 
 local function idFromAsset(asset)
 	if not asset then return nil end
-	return tonumber(asset:match("(%d+)"))
+	return tonumber((asset:match("(%d+)")))
 end
 
+-- Emote wheel / tool actions use these priorities
 local function isEmoteOrActionPlaying(hum)
 	if not hum then return false end
 	for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
-		local p = t.Priority
-		if p == Enum.AnimationPriority.Action
-			or p == Enum.AnimationPriority.Action2
-			or p == Enum.AnimationPriority.Action3
-			or p == Enum.AnimationPriority.Action4 then
-			return true
+		if t.IsPlaying then
+			local p = t.Priority
+			if p == Enum.AnimationPriority.Action
+				or p == Enum.AnimationPriority.Action2
+				or p == Enum.AnimationPriority.Action3
+				or p == Enum.AnimationPriority.Action4 then
+				return true
+			end
 		end
 	end
 	return false
@@ -147,7 +150,7 @@ statusLabel.LayoutOrder = 0
 statusLabel.Size = UDim2.new(1, 0, 0, 44)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
-statusLabel.Text = "Idle1 = loop  |  Idle2 = full fidget every 5–15s, then back to Idle1\nPress Apply after load"
+statusLabel.Text = "Idle2 never starts/continues during emotes.\nPress Apply after load."
 statusLabel.TextColor3 = Color3.fromRGB(170, 170, 180)
 statusLabel.TextSize = 11
 statusLabel.TextWrapped = true
@@ -265,8 +268,7 @@ local function captureOriginals(char)
 	if not animate then return false end
 
 	local idles = getIdleAnimations(animate)
-	originals.idle1 = {}
-	originals.idle2 = {}
+	originals.idle1, originals.idle2 = {}, {}
 	if idles[1] then table.insert(originals.idle1, { id = idles[1].AnimationId }) end
 	if idles[2] then table.insert(originals.idle2, { id = idles[2].AnimationId }) end
 
@@ -286,34 +288,14 @@ local function captureOriginals(char)
 	return true
 end
 
-local function setIdleIndex(char, index, id)
-	local animate = getAnimate(char)
-	if not animate then return false end
-	local idles = getIdleAnimations(animate)
-	local asset = assetString(id)
-	if idles[index] then
-		idles[index].AnimationId = asset
-		return true
-	end
-	if index == 1 and idles[1] then
-		idles[1].AnimationId = asset
-		return true
-	end
-	return false
-end
-
--- Keep Idle1 as the only Animate idle so it doesn't fall back to stock
 local function enforceIdle1OnAnimate(char)
 	if not idle1Asset then return end
-	local id = idFromAsset(idle1Asset)
-	if not id then return end
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	-- never touch Animate while emoting
+	if isEmoteOrActionPlaying(hum) then return end
 	local idles = getIdleAnimations(getAnimate(char))
-	-- set ALL idle entries to Idle1 so Animate never swaps to a stock Animation2
 	for _, animObj in ipairs(idles) do
 		animObj.AnimationId = idle1Asset
-	end
-	if #idles == 0 then
-		setIdleIndex(char, 1, id)
 	end
 end
 
@@ -375,7 +357,7 @@ local function stopIdle2Track(fade)
 		idle2Track = nil
 		pcall(function()
 			if t.IsPlaying then
-				t:Stop(fade or 0.15)
+				t:Stop(fade or 0.12)
 			end
 			t:Destroy()
 		end)
@@ -390,14 +372,22 @@ local function playIdle2Once()
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return end
 	if horizontalSpeed(char) > 2 then return end
+	-- critical: do not start over emotes
 	if isEmoteOrActionPlaying(hum) then return end
 
 	idle2Busy = true
 
-	-- Soft-stop only Idle-priority tracks so fidget can play fully
-	for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
-		if t.Priority == Enum.AnimationPriority.Idle then
-			pcall(function() t:Stop(0.2) end)
+	-- Only fade OUR idle1 track weight — do not Stop every Idle track (breaks some emotes)
+	if idle1Asset then
+		for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
+			if t.IsPlaying and t.Priority == Enum.AnimationPriority.Idle then
+				local aid = t.Animation and t.Animation.AnimationId or ""
+				if aid == idle1Asset then
+					pcall(function()
+						t:AdjustWeight(0.05, 0.2)
+					end)
+				end
+			end
 		end
 	end
 
@@ -415,10 +405,10 @@ local function playIdle2Once()
 
 	idle2Track = track
 	track.Looped = false
+	-- Idle priority: below Action emotes, so emote wheel always wins
 	track.Priority = Enum.AnimationPriority.Idle
-	track:Play(0.25)
+	track:Play(0.2)
 
-	-- When finished (or stopped), re-apply Idle1 on Animate so it doesn't snap to stock
 	local finished = false
 	local function finish()
 		if finished then return end
@@ -426,14 +416,16 @@ local function playIdle2Once()
 		idle2Track = nil
 		idle2Busy = false
 		pcall(function() anim:Destroy() end)
+
 		local c = LocalPlayer.Character
-		if c then
+		local h = c and c:FindFirstChildOfClass("Humanoid")
+		-- only restore idle1 if not emoting
+		if c and not isEmoteOrActionPlaying(h) then
 			enforceIdle1OnAnimate(c)
 		end
 	end
 
 	track.Stopped:Once(finish)
-	-- Safety if Stopped never fires
 	task.delay(12, function()
 		if idle2Track == track then
 			pcall(function() track:Stop(0.1) end)
@@ -451,9 +443,14 @@ local function startIdle2Loop()
 			if not running or not idle2LoopRunning or not idle2Asset then
 				break
 			end
-			-- wait until previous fidget fully finished
 			while idle2Busy and running do
 				task.wait(0.2)
+			end
+			-- skip this tick entirely if emoting
+			local char = LocalPlayer.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum and isEmoteOrActionPlaying(hum) then
+				continue
 			end
 			if running and idle2LoopRunning and idle2Asset then
 				playIdle2Once()
@@ -469,15 +466,18 @@ local function stopIdle2Loop()
 	stopIdle2Track(0.1)
 end
 
--- Only cancel fidget for real movement / emotes (not tiny idle sway)
+-- Cancel fidget only for real movement or emotes (never touch the emote track itself)
 connect(RunService.Heartbeat, function()
 	if not idle2Track or not idle2Track.IsPlaying then return end
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
 	if horizontalSpeed(char) > 2.5 or isEmoteOrActionPlaying(hum) then
-		stopIdle2Track(0.15)
-		enforceIdle1OnAnimate(char)
+		stopIdle2Track(0.1)
+		-- do not enforce idle1 during emote
+		if not isEmoteOrActionPlaying(hum) then
+			enforceIdle1OnAnimate(char)
+		end
 	end
 end)
 
@@ -500,7 +500,9 @@ local function applyAll()
 		sawBundle = true
 	elseif id1 then
 		idle1Asset = assetString(id1)
-		enforceIdle1OnAnimate(char)
+		if not isEmoteOrActionPlaying(char:FindFirstChildOfClass("Humanoid")) then
+			enforceIdle1OnAnimate(char)
+		end
 		applied += 1
 	end
 
@@ -533,7 +535,7 @@ local function applyAll()
 	if sawBundle then
 		statusLabel.Text = "Don't use /bundles/ links."
 	elseif applied > 0 then
-		statusLabel.Text = ("Applied %d. Idle2 plays fully, then Idle1 — repeats every 5–15s."):format(applied)
+		statusLabel.Text = ("Applied %d. Idle2 yields to emote wheel."):format(applied)
 	else
 		statusLabel.Text = "Nothing applied"
 	end
