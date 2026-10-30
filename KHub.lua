@@ -1433,7 +1433,7 @@ task.spawn(function()
 		end
 
 		local function cmdCheck()
-			task.wait(5.3)
+			task.wait(0.3)
 			say("Checking khub status")
 			task.wait(5.3)
 			local ok, body = pcall(function()
