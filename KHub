@@ -972,6 +972,7 @@ local verifiedScripts = {
 	{name = "LSSR Staff Watch", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/LSSR%20Staff%20Watch.lua"},
 	{name = "Invis Player Search", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/InvisPlayers.lua"},
 	{name = "Freecam", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/freecam.lua"},
+	{name = "Animation Changer", url = "https://raw.githubusercontent.com/Kttyz/Scripts/refs/heads/main/animations.lua"},
 }
 
 for i, scriptData in ipairs(verifiedScripts) do
