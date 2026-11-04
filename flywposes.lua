@@ -1,6 +1,6 @@
 --!nonstrict
 --[[
-	flywposes.lua — client-side flight with pose animations.
+	flywposes.lua — client-side flight with the System Broken fly poses.
 
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/Kttyz/scripts/main/flywposes.lua"))()
 
@@ -10,11 +10,15 @@
 	Left Ctrl   descend
 	Left Shift  sprint
 
-	Poses live in CONFIG.poses as animation asset ids. Leave one nil and the
-	script borrows the matching animation already on your avatar, so it flies
-	out of the box; paste your own ids to take over. The character is held in
-	the pose with an AnimationPriority.Action track, so the pose wins over the
-	default fall and walk animations while you fly.
+	The poses are the ones System Broken uses. That script does not just play an
+	animation: it plays it and then freezes the track at a fixed TimePosition
+	with speed 0, so the character holds one still pose instead of cycling the
+	clip. These are the same asset ids and the same TimePositions, done the same
+	way. Each pose is { id = <asset id>, time = <seconds> }.
+
+	System Broken has no separate pose for rising or descending, so those two
+	hold the hover pose. Change any time value if a clip doesn't freeze on the
+	frame you want.
 ]]
 
 if _G.FlywPosesCleanup then
@@ -25,48 +29,38 @@ end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContentProvider = game:GetService("ContentProvider")
 
 local player = Players.LocalPlayer
 
 local CONFIG = {
 	toggleKey = Enum.KeyCode.F,
-	speed = 62,
+	speed = 50,
 	sprintMultiplier = 1.8,
 	verticalSpeed = 46,
 	acceleration = 10,
 	pitch = 20,
 	bank = 26,
-	poseFade = 0.25,
+	poseFade = 0.2,
 	showBadge = true,
 
-	-- nil = borrow from your avatar. Number or "rbxassetid://..." = use that.
+	-- id and time are straight out of System Broken's PlayAnim(id, time, speed) calls.
 	poses = {
-		hover = nil,
-		forward = nil,
-		back = nil,
-		left = nil,
-		right = nil,
-		up = nil,
-		down = nil,
+		hover   = { id = 10714347256, time = 4.00 },
+		forward = { id = 10714177846, time = 4.65 },
+		back    = { id = 10147823318, time = 4.11 },
+		left    = { id = 10147823318, time = 3.55 },
+		right   = { id = 10147823318, time = 4.81 },
+		up      = { id = 10714347256, time = 4.00 },
+		down    = { id = 10714347256, time = 4.00 },
 	},
-}
-
-local POSE_FALLBACK = {
-	hover = "fall",
-	forward = "swim",
-	back = "fall",
-	left = "swim",
-	right = "swim",
-	up = "jump",
-	down = "fall",
 }
 
 local wantFly = false
 local flying = false
-local humanoid, root, animator
+local humanoid, root, animator, animateScript
 local bodyVelocity, bodyGyro
 local stepConn, deathConn, spawnConn, inputConn
-local resolvedPoses = {}
 local poseTracks = {}
 local poseAssets = {}
 local poseFailures = {}
@@ -132,21 +126,6 @@ local function setBadge(on)
 	badgeSpeed = CONFIG.speed
 end
 
-local function readAvatarAnimations(character)
-	local ids = {}
-	local animate = character:FindFirstChild("Animate")
-	if not animate then return ids end
-	for _, item in ipairs(animate:GetDescendants()) do
-		if item:IsA("Animation") then
-			local key = string.lower(item.Name)
-			if not ids[key] and item.AnimationId ~= "" then
-				ids[key] = item.AnimationId
-			end
-		end
-	end
-	return ids
-end
-
 local function toAssetId(value)
 	if typeof(value) == "number" then
 		return "rbxassetid://" .. tostring(math.floor(value))
@@ -160,26 +139,17 @@ local function toAssetId(value)
 	return nil
 end
 
-local function resolvePoses(character)
-	local avatarIds = readAvatarAnimations(character)
-	resolvedPoses = {}
-	for name, fallbackName in pairs(POSE_FALLBACK) do
-		local id = toAssetId(CONFIG.poses[name]) or avatarIds[fallbackName]
-		if id and id ~= "" then
-			resolvedPoses[name] = id
-		end
-	end
-end
-
 local function getPoseTrack(name)
 	local cached = poseTracks[name]
 	if cached then return cached end
 	if poseFailures[name] then return nil end
 
-	local id = resolvedPoses[name]
+	local pose = CONFIG.poses[name]
+	local id = pose and toAssetId(pose.id)
 	if not id or not animator then return nil end
 
 	local asset = Instance.new("Animation")
+	asset.Name = "FlywPose_" .. name
 	asset.AnimationId = id
 
 	local ok, track = pcall(function()
@@ -199,28 +169,80 @@ local function getPoseTrack(name)
 	return track
 end
 
-local function setPose(name, force)
-	if not force and activePose == name then return end
-	if not resolvedPoses[name] then
-		name = "hover"
+-- System Broken plays the track, jumps it to a fixed TimePosition and sets the
+-- speed to 0, which freezes the clip on that frame. TimePosition can't be set
+-- until the track has loaded, so wait for Length and clamp to it.
+local function freezeAt(track, time)
+	task.spawn(function()
+		local deadline = os.clock() + 4
+		while track.Length <= 0 and os.clock() < deadline do
+			task.wait()
+		end
+		local length = track.Length
+		if length <= 0 then return end
+		local target = math.clamp(time, 0, math.max(0, length - 0.02))
+		pcall(function()
+			track.TimePosition = target
+		end)
+		pcall(function()
+			track:AdjustSpeed(0)
+		end)
+	end)
+end
+
+local function stopAllPoses(fade)
+	for _, track in pairs(poseTracks) do
+		pcall(function()
+			track:Stop(fade or 0)
+		end)
 	end
-	if not force and activePose == name then return end
+	activePose = nil
+end
+
+local function setPose(name)
+	if activePose == name then return end
+
+	local pose = CONFIG.poses[name]
+	if not pose then
+		name = "hover"
+		pose = CONFIG.poses.hover
+	end
 
 	local nextTrack = getPoseTrack(name)
 	if not nextTrack then
-		if activePose and poseTracks[activePose] then
-			poseTracks[activePose]:Stop(CONFIG.poseFade)
-		end
-		activePose = nil
+		stopAllPoses(CONFIG.poseFade)
 		return
 	end
 
-	if activePose and poseTracks[activePose] and activePose ~= name then
-		poseTracks[activePose]:Stop(CONFIG.poseFade)
+	local previous = activePose and poseTracks[activePose]
+	if previous and previous ~= nextTrack then
+		pcall(function()
+			previous:Stop(CONFIG.poseFade)
+		end)
 	end
 
-	nextTrack:Play(CONFIG.poseFade, 1, 1)
+	-- speed 0 on Play, so the clip never moves forward while it fades in
+	pcall(function()
+		nextTrack:Play(CONFIG.poseFade, 1, 0)
+	end)
+	freezeAt(nextTrack, pose.time)
 	activePose = name
+end
+
+local function preloadPoses()
+	local list = {}
+	for _, track in pairs(poseTracks) do
+		list[#list + 1] = track
+	end
+	for _, asset in pairs(poseAssets) do
+		list[#list + 1] = asset
+	end
+	if #list == 0 then return end
+	task.spawn(function()
+		pcall(function()
+			ContentProvider:PreloadAsync(list)
+		end)
+	end)
 end
 
 local function stopFly(keepWanted)
@@ -242,11 +264,8 @@ local function stopFly(keepWanted)
 		bodyGyro = nil
 	end
 
-	for _, track in pairs(poseTracks) do
-		pcall(function()
-			track:Stop(CONFIG.poseFade)
-		end)
-	end
+	stopAllPoses(CONFIG.poseFade)
+
 	for _, asset in pairs(poseAssets) do
 		pcall(function()
 			asset:Destroy()
@@ -254,7 +273,12 @@ local function stopFly(keepWanted)
 	end
 	poseTracks = {}
 	poseAssets = {}
-	activePose = nil
+
+	if animateScript and animateScript.Parent then
+		pcall(function()
+			animateScript.Disabled = false
+		end)
+	end
 
 	if humanoid and humanoid.Parent then
 		pcall(function()
@@ -347,8 +371,7 @@ local function bindCharacter()
 		animator = Instance.new("Animator")
 		animator.Parent = hum
 	end
-
-	resolvePoses(character)
+	animateScript = character:FindFirstChild("Animate")
 
 	if deathConn then
 		deathConn:Disconnect()
@@ -381,8 +404,17 @@ local function startFly()
 		humanoid.PlatformStand = true
 	end)
 
+	-- holds the default idle/walk off the character so the pose owns the frame
+	if animateScript then
+		pcall(function()
+			animateScript.Disabled = true
+		end)
+	end
+
 	flying = true
-	setPose("hover", true)
+	activePose = nil
+	setPose("hover")
+	preloadPoses()
 	setBadge(true)
 
 	stepConn = RunService.RenderStepped:Connect(onStep)
@@ -411,7 +443,7 @@ end)
 
 spawnConn = player.CharacterAdded:Connect(function(character)
 	stopFly(true)
-	humanoid, root, animator = nil, nil, nil
+	humanoid, root, animator, animateScript = nil, nil, nil, nil
 	poseTracks, poseAssets, poseFailures = {}, {}, {}
 	activePose = nil
 
