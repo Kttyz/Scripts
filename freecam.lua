@@ -53,6 +53,10 @@ local function freezeCharacter()
 	local character = LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+	-- already frozen this same character: do not overwrite the saved values
+	if savedHumanoid == humanoid and savedRootPart == rootPart then return end
+
 	savedHumanoid, savedRootPart = humanoid, rootPart
 
 	if humanoid then
@@ -88,24 +92,32 @@ end
 
 local function setEnabled(shouldEnable)
 	if enabled == shouldEnable then return end
-	local camera = getCamera()
-	if not camera then return end
 
+	-- The state flag is set BEFORE anything that can fail, so a nil CurrentCamera
+	-- (cutscene, camera swap) can never leave the character frozen with no way back.
 	enabled = shouldEnable
 	looking = false
 	keysDown = {}
 
 	if enabled then
-		savedCameraType = camera.CameraType
-		savedCameraSubject = camera.CameraSubject
-		cameraPosition = camera.CFrame.Position
-		local x, y = camera.CFrame:ToOrientation()
-		pitch, yaw = x, y
-		camera.CameraType = Enum.CameraType.Scriptable
 		freezeCharacter()
+		local camera = getCamera()
+		if camera then
+			savedCameraType = camera.CameraType
+			savedCameraSubject = camera.CameraSubject
+			cameraPosition = camera.CFrame.Position
+			local x, y = camera.CFrame:ToOrientation()
+			pitch, yaw = x, y
+			camera.CameraType = Enum.CameraType.Scriptable
+		else
+			cameraPosition = cameraPosition or Vector3.zero
+		end
 	else
-		camera.CameraType = savedCameraType or Enum.CameraType.Custom
-		camera.CameraSubject = savedCameraSubject
+		local camera = getCamera()
+		if camera then
+			camera.CameraType = savedCameraType or Enum.CameraType.Custom
+			camera.CameraSubject = savedCameraSubject
+		end
 		unfreezeCharacter()
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
@@ -269,6 +281,11 @@ connect(keybindBtn.MouseButton1Click, function()
 	waitingForKey = true
 	keybindBtn.Text = "Press any key..."
 	keybindBtn.BackgroundColor3 = Color3.fromRGB(120, 90, 40)
+	-- release any focused TextBox so the next keystroke is not eaten by typing
+	local focused = UserInputService:GetFocusedTextBox()
+	if focused then
+		pcall(function() focused:ReleaseFocus() end)
+	end
 end)
 
 connect(speedBox.FocusLost, function()
@@ -319,7 +336,7 @@ end)
 connect(UserInputService.InputBegan, function(input, gameProcessed)
 	if not running then return end
 
-	if waitingForKey and input.KeyCode ~= Enum.KeyCode.Unknown then
+	if waitingForKey and not gameProcessed and input.KeyCode ~= Enum.KeyCode.Unknown then
 		TOGGLE_KEY = input.KeyCode
 		keybindBtn.Text = "Current: " .. input.KeyCode.Name
 		keybindBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
@@ -387,4 +404,19 @@ connect(RunService.RenderStepped, function(deltaTime)
 		cameraPosition += movement.Unit * (fast and FAST_SPEED or NORMAL_SPEED) * deltaTime
 	end
 	camera.CFrame = CFrame.new(cameraPosition) * rotation
+end)
+
+-- ==================== RESPAWN ====================
+-- The character is replaced on respawn: re-freeze the new one instead of
+-- leaving freecam running over a character the player can walk with.
+connect(LocalPlayer.CharacterAdded, function()
+	if not running or not enabled then return end
+	unfreezeCharacter()
+	local character = LocalPlayer.Character
+	if not character then return end
+	character:WaitForChild("Humanoid", 5)
+	character:WaitForChild("HumanoidRootPart", 5)
+	if running and enabled then
+		freezeCharacter()
+	end
 end)
